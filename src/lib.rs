@@ -21,7 +21,7 @@ mod paths;
 /// This is where we set up the whole mod and start waiting for the app itself
 /// to be initialized enough for us to start doing real things.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
+extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
     if call_reason != DLL_PROCESS_ATTACH {
         return true;
     }
@@ -85,7 +85,7 @@ fn start_logger(dir: &impl AsRef<Path>) {
             Config::default(),
             fs::OpenOptions::new()
                 .create(true)
-                .write(true)
+                
                 .append(true)
                 .open(filename)
                 .unwrap(),
@@ -107,7 +107,7 @@ pub fn on_load() {
     task_imp.run_recurring(
         move |_: &usize| {
             if first {
-                message_box(format!("In task!"));
+                message_box("In task!".to_string());
                 first = false;
             }
         },

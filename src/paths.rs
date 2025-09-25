@@ -62,5 +62,5 @@ fn current_dll_path() -> Result<PathBuf, String> {
         }
     }
 
-    return Ok(PathBuf::from(OsString::from_wide(&filename)));
+    Ok(PathBuf::from(OsString::from_wide(&filename)))
 }
