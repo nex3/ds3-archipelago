@@ -8,14 +8,16 @@ use darksouls3::sprj::{SprjTaskGroupIndex, SprjTaskImp};
 use eldenring_util::system::wait_for_system_init;
 use fromsoftware_shared::{program::Program, singleton::get_instance, task::*};
 use log::*;
-use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
+use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
 use windows::Win32::{
     Foundation::*, System::SystemServices::*, UI::WindowsAndMessaging::MessageBoxW,
 };
 use windows::core::*;
 
+mod config;
 mod paths;
 
+use config::Config;
 /// The entrypoint called when the DLL is first loaded.
 ///
 /// This is where we set up the whole mod and start waiting for the app itself
@@ -76,16 +78,15 @@ fn start_logger(dir: &impl AsRef<Path>) {
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Warn,
-            Config::default(),
+            simplelog::Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
         ),
         WriteLogger::new(
             LevelFilter::Trace,
-            Config::default(),
+            simplelog::Config::default(),
             fs::OpenOptions::new()
                 .create(true)
-                
                 .append(true)
                 .open(filename)
                 .unwrap(),
