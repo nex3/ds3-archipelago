@@ -1,0 +1,30 @@
+[package]
+name = "ds3-archipelago"
+version = "4.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+name = "archipelago"
+
+[dependencies]
+darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }
+fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
+eldenring = { path = "../fromsoftware-rs/crates/eldenring" }
+eldenring-util = { path = "../fromsoftware-rs/crates/eldenring-util" }
+pelite = "0.10"
+log = "0.4.28"
+simplelog = "0.12.2"
+chrono = "0.4.42"
+
+[dependencies.windows]
+version = "0.*"
+features = [
+    "Win32_Foundation",
+    "Win32_System_SystemServices",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+# https://github.com/CasualX/pelite/issues/287
+[patch.crates-io]
+pelite = { git = "https://github.com/CasualX/pelite.git" }
