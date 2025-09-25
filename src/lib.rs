@@ -1,10 +1,6 @@
-use core::result::Result;
-use std::ffi::OsString;
 use std::fs;
-use std::io;
-use std::os::windows::ffi::OsStringExt;
 use std::panic;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use chrono::prelude::*;
@@ -14,14 +10,11 @@ use fromsoftware_shared::{program::Program, singleton::get_instance, task::*};
 use log::*;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use windows::Win32::{
-    Foundation::*,
-    System::LibraryLoader::{
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleFileNameW, GetModuleHandleExW,
-    },
-    System::SystemServices::*,
-    UI::WindowsAndMessaging::MessageBoxW,
+    Foundation::*, System::SystemServices::*, UI::WindowsAndMessaging::MessageBoxW,
 };
 use windows::core::*;
+
+mod paths;
 
 /// The entrypoint called when the DLL is first loaded.
 ///
@@ -35,13 +28,7 @@ pub unsafe extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
 
     handle_panics();
 
-    let dll = current_dll_path().unwrap();
-    let parent = dll.parent().unwrap();
-    if parent.ends_with("target/debug") {
-        start_logger(&parent.parent().unwrap().parent().unwrap().join("log"));
-    } else {
-        start_logger(&parent.join("log"));
-    }
+    start_logger(&*paths::MOD_DIRECTORY);
 
     trace!("Logger initialized.");
 
@@ -55,45 +42,6 @@ pub unsafe extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
     });
 
     true
-}
-
-fn current_dll_path() -> Result<PathBuf, String> {
-    let mut module = HMODULE::default();
-    unsafe {
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            PCWSTR(current_dll_path as *mut u16),
-            &mut module,
-        )
-    }
-    .map_err(|e| e.to_string())?;
-
-    // `GetModuleFileNameW` doesn't have any way to indicate how much room is
-    // necessary for the file, so we have to progressively increase our
-    // allocation until we hit the appropriate size.
-    let mut size: usize = usize::try_from(MAX_PATH).map_err(|e| e.to_string())?;
-    let mut filename: Vec<u16>;
-    const GROWTH_FACTOR: f64 = 1.5;
-    loop {
-        filename = vec![0; size];
-        let n = unsafe { GetModuleFileNameW(module, &mut filename) } as usize;
-        if n == 0 {
-            return Err(format!(
-                "GetModuleFileNameW failed: {}",
-                io::Error::last_os_error()
-            ));
-        } else if n == filename.capacity()
-            && io::Error::last_os_error()
-                .raw_os_error()
-                .is_some_and(|c| i32::try_from(ERROR_INSUFFICIENT_BUFFER.0).is_ok_and(|e| c == e))
-        {
-            size = (size as f64 * GROWTH_FACTOR) as usize;
-        } else {
-            break;
-        }
-    }
-
-    return Ok(PathBuf::from(OsString::from_wide(&filename)));
 }
 
 /// Handle panics by both logging and popping up a message box, which is the
@@ -153,7 +101,6 @@ fn start_logger(dir: &impl AsRef<Path>) {
 pub fn on_load() {
     let Some(task_imp) = (unsafe { get_instance::<SprjTaskImp>() }) else {
         panic!("Couldn't load SprjTaskImp");
-        return;
     };
 
     let mut first = true;
