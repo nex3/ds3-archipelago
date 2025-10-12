@@ -12,11 +12,16 @@ darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }
 fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
 eldenring = { path = "../fromsoftware-rs/crates/eldenring" }
 eldenring-util = { path = "../fromsoftware-rs/crates/eldenring-util" }
+hudhook = "0.8.1"
 pelite = "0.10"
 log = "0.4.28"
 simplelog = "0.12.2"
 chrono = "0.4.42"
 json = { package = "serde_json", version = "1.0.145" }
+
+[dependencies.imgui]
+version = "0.12"
+features = ["docking"]
 
 [dependencies.windows]
 version = "0.*"

@@ -4,9 +4,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::prelude::*;
-use darksouls3::sprj::{SprjTaskGroupIndex, SprjTaskImp};
 use eldenring_util::system::wait_for_system_init;
-use fromsoftware_shared::{program::Program, singleton::get_instance, task::*};
+use fromsoftware_shared::program::Program;
+use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
 use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
 use windows::Win32::{
@@ -14,16 +14,16 @@ use windows::Win32::{
 };
 use windows::core::*;
 
+mod archipelago_mod;
 mod config;
 mod paths;
 
-use config::Config;
 /// The entrypoint called when the DLL is first loaded.
 ///
 /// This is where we set up the whole mod and start waiting for the app itself
 /// to be initialized enough for us to start doing real things.
 #[unsafe(no_mangle)]
-extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
+extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     if call_reason != DLL_PROCESS_ATTACH {
         return true;
     }
@@ -40,7 +40,15 @@ extern "C" fn DllMain(_: HINSTANCE, call_reason: u32) -> bool {
             .expect("Timeout waiting for system init");
 
         trace!("Game system initialized.");
-        on_load();
+
+        if let Err(e) = Hudhook::builder()
+            .with::<ImguiDx11Hooks>(archipelago_mod::ArchipelagoMod::new())
+            .with_hmodule(hmodule)
+            .build()
+            .apply()
+        {
+            panic!("Couldn't apply hooks: {e:?}");
+        }
     });
 
     true
@@ -74,7 +82,6 @@ fn start_logger(dir: &impl AsRef<Path>) {
     let dir_ref = dir.as_ref();
     fs::create_dir_all(dir_ref).unwrap();
     let filename = dir_ref.join(Local::now().format("archipelago-%Y-%m-%d.log").to_string());
-    message_box(filename.display().to_string());
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Warn,
@@ -93,28 +100,6 @@ fn start_logger(dir: &impl AsRef<Path>) {
         ),
     ])
     .unwrap();
-}
-
-/// A function that runs once the basic game systems are set up.
-///
-/// This doesn't guarantee that any particular singleton is available beyond the
-/// core task system.
-pub fn on_load() {
-    let Some(task_imp) = (unsafe { get_instance::<SprjTaskImp>() }) else {
-        panic!("Couldn't load SprjTaskImp");
-    };
-
-    let mut first = true;
-    task_imp.run_recurring(
-        move |_: &usize| {
-            if first {
-                message_box("In task!".to_string());
-                first = false;
-            }
-        },
-        SprjTaskGroupIndex::DbgDispStep,
-    );
-    trace!("Scheduled initial task.");
 }
 
 /// Displays a message box with the given message.
