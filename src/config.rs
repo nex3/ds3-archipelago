@@ -53,9 +53,9 @@ impl Config {
     }
 
     /// Sets the Archipelago server URL in the config file.
-    pub fn set_url(&mut self, url: impl AsRef<String>) {
+    pub fn set_url(&mut self, url: impl AsRef<str>) {
         self.json
-            .insert("url".to_string(), Value::String(url.as_ref().clone()));
+            .insert("url".to_string(), Value::String(url.as_ref().to_string()));
     }
 
     /// Returns the slot that the config was created with, or None if it
@@ -69,9 +69,9 @@ impl Config {
     }
 
     /// Sets the Archipelago slot in the config file.
-    pub fn set_slot(&mut self, slot: impl AsRef<String>) {
+    pub fn set_slot(&mut self, slot: impl AsRef<str>) {
         self.json
-            .insert("slot".to_string(), Value::String(slot.as_ref().clone()));
+            .insert("slot".to_string(), Value::String(slot.as_ref().to_string()));
     }
 
     /// Returns the password that the config was created with, or None if it
@@ -85,11 +85,15 @@ impl Config {
     }
 
     /// Sets the Archipelago password in the config file.
-    pub fn set_password(&mut self, password: impl AsRef<String>) {
-        self.json.insert(
-            "password".to_string(),
-            Value::String(password.as_ref().clone()),
-        );
+    pub fn set_password(&mut self, password: Option<impl AsRef<str>>) {
+        if let Some(value) = password {
+            self.json.insert(
+                "password".to_string(),
+                Value::String(value.as_ref().to_string()),
+            );
+        } else {
+            self.json.remove("password");
+        }
     }
 
     /// Returns the version that the config was created with, or None if it

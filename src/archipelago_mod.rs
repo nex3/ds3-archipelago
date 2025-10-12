@@ -1,9 +1,9 @@
-use darksouls3::sprj::SprjTaskImp;
-use fromsoftware_shared::singleton::get_instance;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
 
+use crate::archipelago_client_wrapper::{ArchipelagoClientState::*, ArchipelagoClientWrapper};
+use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
 
 /// The fully-initialized Archipelago mod at the whole-game level. This doesn't
@@ -15,34 +15,129 @@ pub struct ArchipelagoMod {
     /// game.
     config: Config,
 
+    /// The Archipelago client connection, if it's connected.
+    client: Option<ArchipelagoClientWrapper>,
+
+    /// The log of messages displayed in the overlay.
+    log_buffer: Vec<String>,
+
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
 
-    task_imp: &'static mut SprjTaskImp,
+    /// The URL field in the modal connection popup.
+    popup_url: String,
+
+    /// The slot name field in the modal connection popup.
+    popup_slot: String,
+
+    /// The password field in the modal connection popup.
+    popup_password: String,
+
+    /// Whether the log was previously scrolled all the way down.
+    log_was_scrolled_down: bool,
+
+    /// The number of frames that have elapsed since new logs were last added.
+    /// We use this to determine when to auto-scroll the log window.
+    frames_since_new_logs: i64,
 }
 
+// Safety: The sole ArchipelagoMod instance is owned by Hudhook, which only ever
+// interacts with it during frame rendering. We know DS3 frame rendering always
+// happens on the main thread, and never in parallel, so synchronization is not
+// a real concern.
+unsafe impl Sync for ArchipelagoMod {}
+
 impl ArchipelagoMod {
-    pub fn new() -> ArchipelagoMod {
+    /// Creates a new instance of the mod.
+    pub fn new() -> Self {
         let config = match Config::load_or_default() {
             Ok(config) => config,
             Err(e) => panic!("Failed to load config: {e:?}"),
         };
 
-        let Some(task_imp) = (unsafe { get_instance::<SprjTaskImp>() }) else {
-            panic!("Couldn't load SprjTaskImp");
+        let mut ap_mod = ArchipelagoMod {
+            config,
+            client: None,
+            log_buffer: vec![],
+            viewport_size: None,
+            popup_url: String::new(),
+            popup_slot: String::new(),
+            popup_password: String::new(),
+            log_was_scrolled_down: false,
+            frames_since_new_logs: 0,
         };
 
-        Self {
-            config,
-            viewport_size: None,
-            task_imp,
+        if ap_mod.config.url().is_some() && ap_mod.config.slot().is_some() {
+            ap_mod.connect();
         }
+
+        return ap_mod;
+    }
+
+    /// Returns the simplified connection state for [client].
+    fn simple_client_state(&self) -> SimpleClientState {
+        if let Some(client) = &self.client {
+            match client.state() {
+                Disconnected(_) => SimpleClientState::Disconnected,
+                Connecting => SimpleClientState::Connecting,
+                Connected(_) => SimpleClientState::Connected,
+            }
+        } else {
+            SimpleClientState::Disconnected
+        }
+    }
+
+    /// A function that's run just before rendering the overlay UI in every
+    /// frame render. This is where the core logic of the mod takes place.
+    fn tick(&mut self) {
+        // We can't pattern match here because we need to use self.client
+        // mutably while also calling `self.log()` which is a different mutable
+        // self borrow.
+        if self.client.is_some() {
+            let old_state = self.simple_client_state();
+            self.client.as_mut().unwrap().update();
+            if let Disconnected(err) = self.client.as_ref().unwrap().state() {
+                match old_state {
+                    SimpleClientState::Connecting => {
+                        self.log(format!("Connection failed: {}", err));
+                    }
+                    SimpleClientState::Connected => self.log(format!("Disonnected: {}", err)),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Initiates a new connection to the Archipelago server based on the data
+    /// in the [config]. As a precondition, this requires the config's URL and
+    /// slot to be set.
+    fn connect(&mut self) {
+        self.client = Some(ArchipelagoClientWrapper::new(
+            self.config.url().unwrap(),
+            self.config.slot().unwrap(),
+            self.config.password(),
+            None,
+            vec![],
+        ));
+    }
+
+    /// Writes a message to the log buffer that we display to the user in the
+    /// overlay, as well as to the internal logger.
+    fn log(&mut self, message: impl AsRef<str>) {
+        let message_ref = message.as_ref();
+        info!("[AP] {message_ref}");
+        // Consider making this a circular buffer if it ends up eating too much
+        // memory over time.
+        self.log_buffer.push(message_ref.to_string());
+        self.frames_since_new_logs = 0;
     }
 }
 
 impl ImguiRenderLoop for ArchipelagoMod {
     fn render(&mut self, ui: &mut Ui) {
+        self.tick();
+
         let Some(viewport_size) = self.viewport_size else {
             // Work around veeenu/hudhook#235
             ui.window("tmp")
@@ -52,25 +147,94 @@ impl ImguiRenderLoop for ArchipelagoMod {
             return;
         };
 
-        ui.window("Archipelago")
+        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
             .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 200.], Condition::FirstUseEver)
+            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
             .build(|| {
                 let scale = 1.8;
                 ui.set_window_font_scale(scale);
 
-                let pos_before_text = ui.cursor_pos();
-                ui.text_wrapped("Connection status: ");
-                // All cusor positions are just magic numbers found by testing.
-                // As far as I know imgui has no better way of doing this.
-                ui.set_cursor_pos([pos_before_text[0] + 130.0 * scale, pos_before_text[1]]);
-                ui.text_colored(
-                    ImColor32::from_rgb(0xff, 0x44, 0x44).to_rgba_f32s(),
-                    "Disconnected",
-                );
+                ui.text_wrapped("Connection status:");
+                ui.same_line();
+                match self.simple_client_state() {
+                    SimpleClientState::Connected => ui.text_colored(
+                        ImColor32::from_rgb(0x88, 0xff, 0x88).to_rgba_f32s(),
+                        "Connected",
+                    ),
+                    SimpleClientState::Connecting => ui.text("Connecting..."),
+                    SimpleClientState::Disconnected => {
+                        ui.text_colored(
+                            ImColor32::from_rgb(0xff, 0x44, 0x44).to_rgba_f32s(),
+                            "Disconnected",
+                        );
+                        ui.same_line();
+                        if ui.button("Connect") {
+                            ui.open_popup("#connect");
+                            copy_from_or_clear(&mut self.popup_url, self.config.url());
+                            copy_from_or_clear(&mut self.popup_slot, self.config.slot());
+                            copy_from_or_clear(&mut self.popup_password, self.config.password());
+                        }
+                    }
+                }
                 ui.separator();
+
+                ui.child_window("#log")
+                    .size([0.0, -30.])
+                    .draw_background(false)
+                    .always_vertical_scrollbar(true)
+                    .build(|| {
+                        for message in &self.log_buffer {
+                            ui.text(message);
+                        }
+                        if self.log_was_scrolled_down && self.frames_since_new_logs < 10 {
+                            ui.set_scroll_y(ui.scroll_max_y());
+                        }
+                        self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
+                    });
+
+                ui.modal_popup_config("#connect")
+                    .title_bar(false)
+                    .collapsible(false)
+                    .resizable(false)
+                    .build(|| {
+                        let t = ui.push_item_width(400.);
+                        ui.input_text("Room URL", &mut self.popup_url)
+                            .hint("archipelago.gg:12345")
+                            .chars_noblank(true)
+                            .build();
+                        ui.input_text("Player Name", &mut self.popup_slot).build();
+                        ui.input_text("Password", &mut self.popup_password)
+                            .password(true)
+                            .build();
+                        drop(t);
+
+                        ui.disabled(
+                            self.popup_url.len() == 0 || self.popup_slot.len() == 0,
+                            || {
+                                if ui.button("Connect") {
+                                    ui.close_current_popup();
+                                    self.config.set_url(&self.popup_url);
+                                    self.config.set_slot(&self.popup_slot);
+                                    self.config.set_password(if self.popup_password.len() == 0 {
+                                        None
+                                    } else {
+                                        Some(&self.popup_password)
+                                    });
+
+                                    if let Err(e) = self.config.save() {
+                                        error!("Failed to save config: {e}");
+                                    }
+                                    self.connect();
+                                }
+                            },
+                        );
+                    });
             });
+    }
+
+    fn initialize<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
+        ctx.set_clipboard_backend(WindowsClipboardBackend {});
     }
 
     fn before_render<'a>(
@@ -78,9 +242,28 @@ impl ImguiRenderLoop for ArchipelagoMod {
         ctx: &mut Context,
         _render_context: &'a mut dyn RenderContext,
     ) {
+        self.frames_since_new_logs += 1;
         self.viewport_size = match ctx.main_viewport().size {
             [0., 0.] => None,
             size => Some(size),
         };
+    }
+}
+
+/// A simplification of [ArchipelagoClientState] that doesn't contain any
+/// actual data and thus doesn't need to worry about lifetimes.
+enum SimpleClientState {
+    Disconnected,
+    Connecting,
+    Connected,
+}
+
+/// If [source] is set, copies its contents into [target]. Otherwise, sets
+/// [target] to the empty string.
+fn copy_from_or_clear(target: &mut String, source: Option<&String>) {
+    if let Some(value) = source {
+        target.clone_from(value);
+    } else {
+        target.clear();
     }
 }
