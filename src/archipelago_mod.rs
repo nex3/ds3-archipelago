@@ -167,6 +167,110 @@ impl ArchipelagoMod {
             .push(PrintJSON::message(message_ref.to_string()));
         self.frames_since_new_logs = 0;
     }
+
+    // Rendering
+
+    /// Renders the modal popup which queries the player for connection
+    /// information.
+    fn render_connection_popup(&mut self, ui: &Ui) {
+        ui.modal_popup_config("#connect")
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .build(|| {
+                let t = ui.push_item_width(400.);
+                ui.input_text("Room URL", &mut self.popup_url)
+                    .hint("archipelago.gg:12345")
+                    .chars_noblank(true)
+                    .build();
+                ui.input_text("Player Name", &mut self.popup_slot).build();
+                ui.input_text("Password", &mut self.popup_password)
+                    .password(true)
+                    .build();
+                drop(t);
+
+                ui.disabled(
+                    self.popup_url.len() == 0 || self.popup_slot.len() == 0,
+                    || {
+                        if ui.button("Connect") {
+                            ui.close_current_popup();
+                            self.config.set_url(&self.popup_url);
+                            self.config.set_slot(&self.popup_slot);
+                            self.config.set_password(if self.popup_password.len() == 0 {
+                                None
+                            } else {
+                                Some(&self.popup_password)
+                            });
+
+                            if let Err(e) = self.config.save() {
+                                error!("Failed to save config: {e}");
+                            }
+                            self.connect();
+                        }
+                    },
+                );
+            });
+    }
+
+    /// Renders the widget that displays the current connection status and
+    /// allows the player to reconnect to Archipelago.
+    fn render_connection_widget(&mut self, ui: &Ui) {
+        ui.text("Connection status:");
+        ui.same_line();
+        match self.simple_client_state() {
+            SimpleClientState::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
+            SimpleClientState::Connecting => ui.text("Connecting..."),
+            SimpleClientState::Disconnected => {
+                ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
+                ui.same_line();
+                if ui.button("Connect") {
+                    ui.open_popup("#connect");
+                    copy_from_or_clear(&mut self.popup_url, self.config.url());
+                    copy_from_or_clear(&mut self.popup_slot, self.config.slot());
+                    copy_from_or_clear(&mut self.popup_password, self.config.password());
+                }
+            }
+        }
+    }
+
+    /// Renders the log window which displays all the messages sent from the server.
+    fn render_log_window(&mut self, ui: &Ui) {
+        ui.child_window("#log")
+            .size([0.0, -30.])
+            .draw_background(false)
+            .always_vertical_scrollbar(true)
+            .horizontal_scrollbar(true)
+            .build(|| {
+                for message in &self.log_buffer {
+                    use PrintJSON::*;
+                    write_message_data(
+                        ui,
+                        &message.data(),
+                        // De-emphasize miscellaneous server messages.
+                        match message {
+                            Chat { .. }
+                            | ServerChat { .. }
+                            | Tutorial { .. }
+                            | CommandResult { .. }
+                            | AdminCommandResult { .. }
+                            | Unknown { .. } => 0xff,
+                            ItemSend { receiving, .. }
+                            | ItemCheat { receiving, .. }
+                            | Hint { receiving, .. }
+                                if self.slot().is_some_and(|s| *receiving == s) =>
+                            {
+                                0xFF
+                            }
+                            _ => 0xAA,
+                        },
+                    );
+                }
+                if self.log_was_scrolled_down && self.frames_since_new_logs < 10 {
+                    ui.set_scroll_y(ui.scroll_max_y());
+                }
+                self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
+            });
+    }
 }
 
 impl ImguiRenderLoop for ArchipelagoMod {
@@ -190,99 +294,10 @@ impl ImguiRenderLoop for ArchipelagoMod {
                 let scale = 1.8;
                 ui.set_window_font_scale(scale);
 
-                ui.text("Connection status:");
-                ui.same_line();
-                match self.simple_client_state() {
-                    SimpleClientState::Connected => {
-                        ui.text_colored(RED.to_rgba_f32s(), "Connected")
-                    }
-                    SimpleClientState::Connecting => ui.text("Connecting..."),
-                    SimpleClientState::Disconnected => {
-                        ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
-                        ui.same_line();
-                        if ui.button("Connect") {
-                            ui.open_popup("#connect");
-                            copy_from_or_clear(&mut self.popup_url, self.config.url());
-                            copy_from_or_clear(&mut self.popup_slot, self.config.slot());
-                            copy_from_or_clear(&mut self.popup_password, self.config.password());
-                        }
-                    }
-                }
+                self.render_connection_widget(ui);
                 ui.separator();
-
-                ui.child_window("#log")
-                    .size([0.0, -30.])
-                    .draw_background(false)
-                    .always_vertical_scrollbar(true)
-                    .horizontal_scrollbar(true)
-                    .build(|| {
-                        for message in &self.log_buffer {
-                            use PrintJSON::*;
-                            write_message_data(
-                                ui,
-                                &message.data(),
-                                // De-emphasize miscellaneous server messages.
-                                match message {
-                                    Chat { .. }
-                                    | ServerChat { .. }
-                                    | Tutorial { .. }
-                                    | CommandResult { .. }
-                                    | AdminCommandResult { .. }
-                                    | Unknown { .. } => 0xff,
-                                    ItemSend { receiving, .. }
-                                    | ItemCheat { receiving, .. }
-                                    | Hint { receiving, .. }
-                                        if self.slot().is_some_and(|s| *receiving == s) =>
-                                    {
-                                        0xFF
-                                    }
-                                    _ => 0xAA,
-                                },
-                            );
-                        }
-                        if self.log_was_scrolled_down && self.frames_since_new_logs < 10 {
-                            ui.set_scroll_y(ui.scroll_max_y());
-                        }
-                        self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
-                    });
-
-                ui.modal_popup_config("#connect")
-                    .title_bar(false)
-                    .collapsible(false)
-                    .resizable(false)
-                    .build(|| {
-                        let t = ui.push_item_width(400.);
-                        ui.input_text("Room URL", &mut self.popup_url)
-                            .hint("archipelago.gg:12345")
-                            .chars_noblank(true)
-                            .build();
-                        ui.input_text("Player Name", &mut self.popup_slot).build();
-                        ui.input_text("Password", &mut self.popup_password)
-                            .password(true)
-                            .build();
-                        drop(t);
-
-                        ui.disabled(
-                            self.popup_url.len() == 0 || self.popup_slot.len() == 0,
-                            || {
-                                if ui.button("Connect") {
-                                    ui.close_current_popup();
-                                    self.config.set_url(&self.popup_url);
-                                    self.config.set_slot(&self.popup_slot);
-                                    self.config.set_password(if self.popup_password.len() == 0 {
-                                        None
-                                    } else {
-                                        Some(&self.popup_password)
-                                    });
-
-                                    if let Err(e) = self.config.save() {
-                                        error!("Failed to save config: {e}");
-                                    }
-                                    self.connect();
-                                }
-                            },
-                        );
-                    });
+                self.render_log_window(ui);
+                self.render_connection_popup(ui);
             });
     }
 
