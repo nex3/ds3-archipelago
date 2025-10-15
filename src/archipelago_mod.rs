@@ -5,7 +5,18 @@ use log::*;
 use crate::archipelago_client_wrapper::{ArchipelagoClientState::*, ArchipelagoClientWrapper};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
-use archipelago_rs::protocol::ItemsHandlingFlags;
+use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
+
+const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
+const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
+const WHITE: ImColor32 = ImColor32::from_rgb(0xFF, 0xFF, 0xFF);
+// This is the darkest gray that still meets WCAG guidelines for contrast with
+// the black background of the overlay.
+const BLACK: ImColor32 = ImColor32::from_rgb(0x9C, 0x9C, 0x9C);
+const YELLOW: ImColor32 = ImColor32::from_rgb(0xFC, 0xE9, 0x4F);
+const BLUE: ImColor32 = ImColor32::from_rgb(0x82, 0xA9, 0xD4);
+const MAGENTA: ImColor32 = ImColor32::from_rgb(0xBF, 0x9B, 0xBC);
+const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 
 /// The fully-initialized Archipelago mod at the whole-game level. This doesn't
 /// contain anything specific to a loaded game instance.
@@ -20,7 +31,7 @@ pub struct ArchipelagoMod {
     client: Option<ArchipelagoClientWrapper>,
 
     /// The log of messages displayed in the overlay.
-    log_buffer: Vec<String>,
+    log_buffer: Vec<PrintJSON>,
 
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
@@ -97,7 +108,20 @@ impl ArchipelagoMod {
         // self borrow.
         if self.client.is_some() {
             let old_state = self.simple_client_state();
-            self.client.as_mut().unwrap().update();
+
+            {
+                let client = self.client.as_mut().unwrap();
+                client.update();
+                let new_messages = client.messages();
+                if new_messages.len() > 0 {
+                    self.frames_since_new_logs = 0;
+                }
+                for message in &new_messages {
+                    info!("[APS] {message}");
+                }
+                self.log_buffer.extend(new_messages);
+            }
+
             if let Disconnected(err) = self.client.as_ref().unwrap().state() {
                 match old_state {
                     SimpleClientState::Connecting => {
@@ -108,6 +132,15 @@ impl ArchipelagoMod {
                 }
             }
         }
+    }
+
+    /// The player's slot ID, if it's known.
+    fn slot(&self) -> Option<i32> {
+        let client = self.client.as_ref()?;
+        let Connected(connected) = client.state() else {
+            return None;
+        };
+        Some(connected.slot)
     }
 
     /// Initiates a new connection to the Archipelago server based on the data
@@ -127,10 +160,11 @@ impl ArchipelagoMod {
     /// overlay, as well as to the internal logger.
     fn log(&mut self, message: impl AsRef<str>) {
         let message_ref = message.as_ref();
-        info!("[AP] {message_ref}");
+        info!("[APC] {message_ref}");
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
-        self.log_buffer.push(message_ref.to_string());
+        self.log_buffer
+            .push(PrintJSON::message(message_ref.to_string()));
         self.frames_since_new_logs = 0;
     }
 }
@@ -156,19 +190,15 @@ impl ImguiRenderLoop for ArchipelagoMod {
                 let scale = 1.8;
                 ui.set_window_font_scale(scale);
 
-                ui.text_wrapped("Connection status:");
+                ui.text("Connection status:");
                 ui.same_line();
                 match self.simple_client_state() {
-                    SimpleClientState::Connected => ui.text_colored(
-                        ImColor32::from_rgb(0x88, 0xff, 0x88).to_rgba_f32s(),
-                        "Connected",
-                    ),
+                    SimpleClientState::Connected => {
+                        ui.text_colored(RED.to_rgba_f32s(), "Connected")
+                    }
                     SimpleClientState::Connecting => ui.text("Connecting..."),
                     SimpleClientState::Disconnected => {
-                        ui.text_colored(
-                            ImColor32::from_rgb(0xff, 0x44, 0x44).to_rgba_f32s(),
-                            "Disconnected",
-                        );
+                        ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
                         ui.same_line();
                         if ui.button("Connect") {
                             ui.open_popup("#connect");
@@ -184,9 +214,31 @@ impl ImguiRenderLoop for ArchipelagoMod {
                     .size([0.0, -30.])
                     .draw_background(false)
                     .always_vertical_scrollbar(true)
+                    .horizontal_scrollbar(true)
                     .build(|| {
                         for message in &self.log_buffer {
-                            ui.text(message);
+                            use PrintJSON::*;
+                            write_message_data(
+                                ui,
+                                &message.data(),
+                                // De-emphasize miscellaneous server messages.
+                                match message {
+                                    Chat { .. }
+                                    | ServerChat { .. }
+                                    | Tutorial { .. }
+                                    | CommandResult { .. }
+                                    | AdminCommandResult { .. }
+                                    | Unknown { .. } => 0xff,
+                                    ItemSend { receiving, .. }
+                                    | ItemCheat { receiving, .. }
+                                    | Hint { receiving, .. }
+                                        if self.slot().is_some_and(|s| *receiving == s) =>
+                                    {
+                                        0xFF
+                                    }
+                                    _ => 0xAA,
+                                },
+                            );
                         }
                         if self.log_was_scrolled_down && self.frames_since_new_logs < 10 {
                             ui.set_scroll_y(ui.scroll_max_y());
@@ -251,6 +303,17 @@ impl ImguiRenderLoop for ArchipelagoMod {
     }
 }
 
+trait ImColor32Ext {
+    /// Returns a copy of [self] with its opacity overridden by [alpha].
+    fn with_alpha(&self, alpha: u8) -> ImColor32;
+}
+
+impl ImColor32Ext for ImColor32 {
+    fn with_alpha(&self, alpha: u8) -> ImColor32 {
+        ImColor32::from_bits((self.to_bits() & 0x00ffffff) | ((alpha as u32) << 24))
+    }
+}
+
 /// A simplification of [ArchipelagoClientState] that doesn't contain any
 /// actual data and thus doesn't need to worry about lifetimes.
 enum SimpleClientState {
@@ -266,5 +329,36 @@ fn copy_from_or_clear(target: &mut String, source: Option<&String>) {
         target.clone_from(value);
     } else {
         target.clear();
+    }
+}
+
+/// Writes the text in [parts] to [ui] in a single line.
+fn write_message_data(ui: &Ui, parts: &Vec<JSONMessagePart>, alpha: u8) {
+    let mut first = true;
+    for part in parts {
+        if !first {
+            ui.same_line();
+        }
+        first = false;
+
+        // TODO: Load in fonts to support bold, maybe write a line manually for
+        // underline? I'm not sure there's a reasonable way to support
+        // background colors.
+        use JSONColor::*;
+        use JSONMessagePart::*;
+        let color = match part {
+            PlayerId { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
+            ItemId { .. } | ItemName { .. } | Color { color: Magenta, .. } => MAGENTA,
+            LocationId { .. }
+            | LocationName { .. }
+            | EntranceName { .. }
+            | Color { color: Cyan, .. } => CYAN,
+            Color { color: Black, .. } => BLACK,
+            Color { color: Red, .. } => RED,
+            Color { color: Green, .. } => GREEN,
+            Color { color: Yellow, .. } => YELLOW,
+            _ => WHITE,
+        };
+        ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), &part.text());
     }
 }

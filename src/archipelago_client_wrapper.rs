@@ -2,8 +2,8 @@ use std::thread;
 
 use archipelago_rs::client::*;
 use archipelago_rs::protocol::*;
-use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 use log::*;
+use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 
 /// A pull-based wrapper around the Archipelago client connection. All of the
 /// actual communication is done on a separate thread. The state only changes
@@ -17,6 +17,9 @@ pub struct ArchipelagoClientWrapper {
 
     /// The transmitter for messages going to the worker thread.
     tx: Sender<ClientMessage>,
+
+    /// Buffered messages waiting to be consumed by the caller.
+    messages: Vec<PrintJSON>,
 
     /// The handle of the worker thread, used to ensure that it's dropped along
     /// with the client wrapper.
@@ -87,6 +90,7 @@ impl ArchipelagoClientWrapper {
             state: ArchipelagoClientState::Connecting,
             rx: outer_rx,
             tx: outer_tx,
+            messages: vec![],
             _handle: handle,
         }
     }
@@ -94,6 +98,14 @@ impl ArchipelagoClientWrapper {
     /// The current state of the client.
     pub fn state(&self) -> &ArchipelagoClientState {
         &self.state
+    }
+
+    /// Returns all Archipelago messages that have been received since the last
+    /// time this message was called.
+    ///
+    /// These are only refreshed when [update] is called.
+    pub fn messages(&mut self) -> Vec<PrintJSON> {
+        std::mem::take(&mut self.messages)
     }
 
     /// Processes any incoming messages from the worker thread and updates the
@@ -122,7 +134,11 @@ impl ArchipelagoClientWrapper {
                 Ok(Ok(ServerMessage::Connected(connected))) => {
                     self.state = ArchipelagoClientState::Connected(connected);
                 }
-                _ => () // Ignore messages we don't care about
+                Ok(Ok(ServerMessage::Print(Print { text }))) => {
+                    self.messages.push(PrintJSON::message(text))
+                }
+                Ok(Ok(ServerMessage::PrintJSON(message))) => self.messages.push(message),
+                _ => (), // Ignore messages we don't care about
             };
         }
     }
