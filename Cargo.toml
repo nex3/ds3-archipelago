@@ -8,29 +8,29 @@ crate-type = ["cdylib"]
 name = "archipelago"
 
 [dependencies]
+archipelago_rs = { path = "../archipelago_rs" }
+chrono = "0.4.42"
+clipboard-win = "5.4.1"
 darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }
-fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
 eldenring = { path = "../fromsoftware-rs/crates/eldenring" }
 eldenring-util = { path = "../fromsoftware-rs/crates/eldenring-util" }
-archipelago_rs = { git = "https://github.com/ryanisaacg/archipelago_rs" }
+fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
 hudhook = "0.8.1"
 imgui = { version = "0.12", features = ["docking", "tables-api"] }
-pelite = "0.10"
-log = "0.4.28"
-simplelog = "0.12.2"
-chrono = "0.4.42"
 json = { package = "serde_json", version = "1.0.145" }
-tokio = { version = "1.47", features = ["rt"] }
-clipboard-win = "5.4.1"
+log = "0.4.28"
+pelite = "0.10"
+simplelog = "0.12.2"
+tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
 
 [dependencies.windows]
-version = "0.*"
+version = "0.54"
 features = [
     "Win32_Foundation",
     "Win32_System_SystemServices",
     "Win32_UI_WindowsAndMessaging",
 ]
 
-# https://github.com/CasualX/pelite/issues/287
 [patch.crates-io]
+# https://github.com/CasualX/pelite/issues/287
 pelite = { git = "https://github.com/CasualX/pelite.git" }

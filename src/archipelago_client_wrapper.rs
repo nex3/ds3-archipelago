@@ -1,9 +1,9 @@
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
-use archipelago_rs::client::{ArchipelagoClient, ArchipelagoError};
-
-use crate::archipelago_client_wrapper::OutboundMessage::*;
+use archipelago_rs::client::*;
+use archipelago_rs::protocol::*;
+use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
+use log::*;
 
 /// A pull-based wrapper around the Archipelago client connection. All of the
 /// actual communication is done on a separate thread. The state only changes
@@ -13,10 +13,10 @@ pub struct ArchipelagoClientWrapper {
     state: ArchipelagoClientState,
 
     /// The receiver for messages coming from the worker thread.
-    rx: Receiver<OutboundMessage>,
+    rx: Receiver<Result<ServerMessage, ArchipelagoError>>,
 
     /// The transmitter for messages going to the worker thread.
-    tx: Sender<InboundMessage>,
+    tx: Sender<ClientMessage>,
 
     /// The handle of the worker thread, used to ensure that it's dropped along
     /// with the client wrapper.
@@ -46,11 +46,11 @@ impl ArchipelagoClientWrapper {
         url: impl AsRef<str>,
         slot: impl AsRef<str>,
         password: Option<impl AsRef<str>>,
-        items_handling: Option<i32>,
+        items_handling: ItemsHandlingFlags,
         tags: Vec<String>,
     ) -> ArchipelagoClientWrapper {
-        let (inner_tx, outer_rx) = channel();
-        let (outer_tx, inner_rx) = channel();
+        let (inner_tx, outer_rx) = channel(1024);
+        let (outer_tx, inner_rx) = channel(1024);
 
         let url_copy = url.as_ref().to_string();
         let slot_copy = slot.as_ref().to_string();
@@ -65,26 +65,21 @@ impl ArchipelagoClientWrapper {
                 Err(e) => panic!("Couldn't load Tokio runtime: {e:?}"),
             };
 
-            let worker = match runtime.block_on(Worker::new(
+            if let Err(e) = runtime.block_on(run_worker(
                 url_copy.as_str(),
                 slot_copy.as_str(),
                 password_copy.as_deref(),
                 items_handling,
                 tags_copy,
+                &inner_tx,
+                inner_rx,
             )) {
-                Ok(worker) => worker,
-                Err(e) => {
-                    let _ = inner_tx.send(Disconnected(e));
-                    return;
+                if let Err(send_err) = inner_tx.blocking_send(Err(e)) {
+                    warn!(
+                        "Failed to send error message from Archipelago client worker thread: \
+                        {send_err:?}"
+                    );
                 }
-            };
-
-            if let Err(_) = inner_tx.send(Connected(worker.connected)) {
-                return;
-            }
-
-            for _ in inner_rx {
-                // ...
             }
         });
 
@@ -108,60 +103,58 @@ impl ArchipelagoClientWrapper {
             match self.rx.try_recv() {
                 Err(TryRecvError::Empty) => return,
                 Err(TryRecvError::Disconnected) => {
+                    // We expect the client to sent a disconnect message or an
+                    // error if the connection is closed.
                     self.state = ArchipelagoClientState::Disconnected(
-                        "ArchpelagoClientWrapper outgoing socket disconnected".to_string(),
+                        "Archipelago client worker thread exited unexpectedly".to_string(),
                     );
                     return;
                 }
-                Ok(Disconnected(err)) => {
+                Ok(Err(err)) => {
+                    warn!("Connection error: {err:?}");
                     self.state = ArchipelagoClientState::Disconnected(err.to_string());
                     return;
                 }
-                Ok(Connected(connected)) => {
+                Ok(Ok(ServerMessage::ConnectionRefused(message))) => {
+                    self.state = ArchipelagoClientState::Disconnected(message.errors.join(", "));
+                    return;
+                }
+                Ok(Ok(ServerMessage::Connected(connected))) => {
                     self.state = ArchipelagoClientState::Connected(connected);
                 }
+                _ => () // Ignore messages we don't care about
             };
         }
     }
 }
 
-/// The data in the worker thread that handles the underlying client.
-struct Worker {
-    /// The underlying Archipelago client.
-    client: ArchipelagoClient,
+/// Creates and runs the Archipelago client in a worker thread.
+async fn run_worker(
+    url: &str,
+    slot: &str,
+    password: Option<&str>,
+    items_handling: ItemsHandlingFlags,
+    tags: Vec<String>,
+    inner_tx: &Sender<Result<ServerMessage, ArchipelagoError>>,
+    mut inner_rx: Receiver<ClientMessage>,
+) -> Result<(), ArchipelagoError> {
+    let mut client = ArchipelagoClient::new(url).await?;
+    let connected = client
+        .connect("Dark Souls III", slot, password, items_handling, tags)
+        .await?;
 
-    /// The data returned from the initial connection.
-    connected: archipelago_rs::protocol::Connected,
-}
+    let Ok(_) = inner_tx.send(Ok(ServerMessage::Connected(connected))).await else {
+        return Ok(());
+    };
 
-impl Worker {
-    /// Constructs the worker and asynchronously begins the initial connection.
-    async fn new(
-        url: &str,
-        slot: &str,
-        password: Option<&str>,
-        items_handling: Option<i32>,
-        tags: Vec<String>,
-    ) -> Result<Worker, ArchipelagoError> {
-        let mut client = ArchipelagoClient::new(url).await?;
-        let connected = client
-            .connect("Dark Souls III", slot, password, items_handling, tags)
-            .await?;
-        Ok(Worker { client, connected })
+    loop {
+        tokio::select! {
+            Some(message) = inner_rx.recv() => client.send(message).await?,
+            result = client.recv() => {
+                let Some(message) = result? else { return Ok(()) };
+                let Ok(_) = inner_tx.send(Ok(message)).await else { return Ok(()) };
+            },
+            else => { return Ok(()) },
+        }
     }
-}
-
-/// Messages sent from the [ArchipelagoClientWrapper] to the worker thread.
-enum InboundMessage {}
-
-/// Messages sent from the worker thread to the [ArchipelagoClientWrapper].
-enum OutboundMessage {
-    /// A message indicating that a connection has been successfully
-    /// established.
-    Connected(archipelago_rs::protocol::Connected),
-
-    /// A message indicating that there is no connection, either because
-    /// establishing it failed in the first place or because it was closed after
-    /// being successfully established.
-    Disconnected(ArchipelagoError),
 }

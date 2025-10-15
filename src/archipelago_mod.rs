@@ -5,6 +5,7 @@ use log::*;
 use crate::archipelago_client_wrapper::{ArchipelagoClientState::*, ArchipelagoClientWrapper};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
+use archipelago_rs::protocol::ItemsHandlingFlags;
 
 /// The fully-initialized Archipelago mod at the whole-game level. This doesn't
 /// contain anything specific to a loaded game instance.
@@ -102,7 +103,7 @@ impl ArchipelagoMod {
                     SimpleClientState::Connecting => {
                         self.log(format!("Connection failed: {}", err));
                     }
-                    SimpleClientState::Connected => self.log(format!("Disonnected: {}", err)),
+                    SimpleClientState::Connected => self.log(format!("Disconnected: {}", err)),
                     _ => {}
                 }
             }
@@ -117,7 +118,7 @@ impl ArchipelagoMod {
             self.config.url().unwrap(),
             self.config.slot().unwrap(),
             self.config.password(),
-            None,
+            ItemsHandlingFlags::empty(),
             vec![],
         ));
     }

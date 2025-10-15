@@ -34,14 +34,14 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
 
     start_logger(&*paths::MOD_DIRECTORY);
 
-    trace!("Logger initialized.");
+    info!("Logger initialized.");
 
     std::thread::spawn(move || {
-        trace!("Worker thread initialized.");
+        info!("Worker thread initialized.");
         wait_for_system_init(&Program::current(), Duration::MAX)
             .expect("Timeout waiting for system init");
 
-        trace!("Game system initialized.");
+        info!("Game system initialized.");
 
         if let Err(e) = Hudhook::builder()
             .with::<ImguiDx11Hooks>(archipelago_mod::ArchipelagoMod::new())
@@ -92,7 +92,7 @@ fn start_logger(dir: &impl AsRef<Path>) {
             ColorChoice::Auto,
         ),
         WriteLogger::new(
-            LevelFilter::Trace,
+            LevelFilter::Info,
             simplelog::Config::default(),
             fs::OpenOptions::new()
                 .create(true)
