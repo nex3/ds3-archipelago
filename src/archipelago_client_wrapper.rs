@@ -108,6 +108,15 @@ impl ArchipelagoClientWrapper {
         std::mem::take(&mut self.messages)
     }
 
+    /// Sends a message to the server and other clients.
+    pub fn say(&mut self, text: impl AsRef<str>) {
+        self.tx
+            .blocking_send(ClientMessage::Say(Say {
+                text: text.as_ref().to_string(),
+            }))
+            .unwrap();
+    }
+
     /// Processes any incoming messages from the worker thread and updates the
     /// client's state accordingly.
     pub fn update(&mut self) {

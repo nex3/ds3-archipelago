@@ -46,6 +46,9 @@ pub struct ArchipelagoMod {
     /// The password field in the modal connection popup.
     popup_password: String,
 
+    /// The text the user typed in the say input.
+    say_input: String,
+
     /// Whether the log was previously scrolled all the way down.
     log_was_scrolled_down: bool,
 
@@ -76,6 +79,7 @@ impl ArchipelagoMod {
             popup_url: String::new(),
             popup_slot: String::new(),
             popup_password: String::new(),
+            say_input: String::new(),
             log_was_scrolled_down: false,
             frames_since_new_logs: 0,
         };
@@ -236,7 +240,7 @@ impl ArchipelagoMod {
     /// Renders the log window which displays all the messages sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
         ui.child_window("#log")
-            .size([0.0, -30.])
+            .size([0.0, -33.])
             .draw_background(false)
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(true)
@@ -271,6 +275,28 @@ impl ArchipelagoMod {
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
     }
+
+    /// Renders the text box in which users can write chats to the server.
+    fn render_say_input(&mut self, ui: &Ui) {
+        ui.disabled(self.client.is_none(), || {
+            let width = ui.push_item_width(-40.);
+            let mut send = ui
+                .input_text("##say-input", &mut self.say_input)
+                .enter_returns_true(true)
+                .build();
+            drop(width);
+
+            ui.same_line();
+            let width = ui.push_item_width(30.);
+            send = ui.arrow_button("##say-button", Direction::Right) || send;
+            drop(width);
+
+            if send {
+                self.client.as_mut().unwrap().say(&self.say_input);
+                self.say_input.clear();
+            }
+        });
+    }
 }
 
 impl ImguiRenderLoop for ArchipelagoMod {
@@ -298,6 +324,7 @@ impl ImguiRenderLoop for ArchipelagoMod {
                 ui.separator();
                 self.render_log_window(ui);
                 self.render_connection_popup(ui);
+                self.render_say_input(ui);
             });
     }
 
