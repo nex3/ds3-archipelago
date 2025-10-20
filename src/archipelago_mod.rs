@@ -1,3 +1,4 @@
+use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
@@ -5,7 +6,6 @@ use log::*;
 use crate::archipelago_client_wrapper::{ArchipelagoClientState::*, ArchipelagoClientWrapper};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
-use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);

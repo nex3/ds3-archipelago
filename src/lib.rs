@@ -19,6 +19,7 @@ mod archipelago_mod;
 mod clipboard_backend;
 mod config;
 mod paths;
+mod preload;
 
 /// The entrypoint called when the DLL is first loaded.
 ///
@@ -35,6 +36,8 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     start_logger(&*paths::MOD_DIRECTORY);
 
     info!("Logger initialized.");
+
+    preload::preload();
 
     std::thread::spawn(move || {
         info!("Worker thread initialized.");

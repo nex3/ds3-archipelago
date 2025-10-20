@@ -439,6 +439,7 @@ dependencies = [
  "nalgebra",
  "nalgebra-glm",
  "pelite",
+ "thiserror 1.0.69",
  "undname",
  "vtable-rs",
  "windows 0.54.0",
