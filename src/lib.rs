@@ -20,6 +20,7 @@ mod clipboard_backend;
 mod config;
 mod paths;
 mod preload;
+mod slot_data;
 
 /// The entrypoint called when the DLL is first loaded.
 ///

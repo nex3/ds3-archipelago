@@ -5,6 +5,8 @@ use archipelago_rs::protocol::*;
 use log::*;
 use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 
+use crate::slot_data::SlotData;
+
 /// A pull-based wrapper around the Archipelago client connection. All of the
 /// actual communication is done on a separate thread. The state only changes
 /// when [ArchipelagoClient.update] is called.
@@ -13,7 +15,7 @@ pub struct ArchipelagoClientWrapper {
     state: ArchipelagoClientState,
 
     /// The receiver for messages coming from the worker thread.
-    rx: Receiver<Result<ServerMessage, ArchipelagoError>>,
+    rx: Receiver<Result<ServerMessage<SlotData>, ArchipelagoError>>,
 
     /// The transmitter for messages going to the worker thread.
     tx: Sender<ClientMessage>,
@@ -34,7 +36,7 @@ pub enum ArchipelagoClientState {
 
     /// The client has successfully connected. This includes data that's always
     /// available with a successful connection.
-    Connected(archipelago_rs::protocol::Connected),
+    Connected(archipelago_rs::protocol::Connected<SlotData>),
 
     /// The client is not connected, either because the initial connection
     /// failed or because an established connection was later closed. This
@@ -160,10 +162,10 @@ async fn run_worker(
     password: Option<&str>,
     items_handling: ItemsHandlingFlags,
     tags: Vec<String>,
-    inner_tx: &Sender<Result<ServerMessage, ArchipelagoError>>,
+    inner_tx: &Sender<Result<ServerMessage<SlotData>, ArchipelagoError>>,
     mut inner_rx: Receiver<ClientMessage>,
 ) -> Result<(), ArchipelagoError> {
-    let mut client = ArchipelagoClient::new(url).await?;
+    let mut client = ArchipelagoClient::<SlotData>::new(url).await?;
     let connected = client
         .connect("Dark Souls III", slot, password, items_handling, tags)
         .await?;

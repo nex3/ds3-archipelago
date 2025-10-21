@@ -20,6 +20,7 @@ imgui = { version = "0.12", features = ["docking", "tables-api"] }
 json = { package = "serde_json", version = "1.0.145" }
 log = "0.4.28"
 pelite = "0.10"
+serde = { version = "1.0.228", features = ["derive"] }
 simplelog = "0.12.2"
 tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
 

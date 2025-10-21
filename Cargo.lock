@@ -318,6 +318,7 @@ dependencies = [
  "imgui",
  "log",
  "pelite",
+ "serde",
  "serde_json",
  "simplelog",
  "tokio",
