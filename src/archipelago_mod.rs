@@ -190,16 +190,45 @@ impl ArchipelagoMod {
                     // Wait a little bit after MapItemMan appears before we
                     // start granting items.
                     && self.load_time.is_some_and(|i| i.elapsed().as_secs() >= 10)
-                    && client.items().len() > save_data.items_granted
                 {
-                    let item = &client.items()[save_data.items_granted];
-                    item_man.grant_item(ItemBufferEntry {
-                        id: item.ds3_id(),
-                        quantity: item.quantity(),
-                        durability: -1,
-                    });
-                    save_data.items_granted += 1;
-                    self.last_item_time = Instant::now();
+                    if client.items().len() > save_data.items_granted {
+                        let item = &client.items()[save_data.items_granted];
+                        item_man.grant_item(ItemBufferEntry {
+                            id: item.ds3_id(),
+                            quantity: item.quantity(),
+                            durability: -1,
+                        });
+                        save_data.items_granted += 1;
+                        self.last_item_time = Instant::now();
+                    }
+                    // Make sure that there are items queued up to add before we
+                    // invalidate the previous list of items. This avoids a race
+                    // condition where we might think [SaveData.items_granted]
+                    // was too large before we received the initial list of
+                    // items in the first place.
+                    else if client.items().len() > 0
+                        && client.items().len() < save_data.items_granted
+                    {
+                        let message = format!(
+                            "The number of items your save has recorded ({}) \
+                             is greater than the number of items Archipelago \
+                             thinks you've received ({}). This probably means \
+                             that your local Archipelago save has been \
+                             corrupted. The client will fix this \
+                             automatically, but you'll end up receiving all \
+                             your items again.",
+                            save_data.items_granted,
+                            client.items().len(),
+                        );
+                        warn!("{}", message);
+                        self.log_buffer.push(PrintJSON::Unknown {
+                            data: vec![JSONMessagePart::Color {
+                                text: "Warning:".to_string(),
+                                color: JSONColor::Red,
+                            }],
+                        });
+                        save_data.items_granted = 0;
+                    }
                 }
             }
         }
