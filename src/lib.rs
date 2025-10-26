@@ -20,7 +20,10 @@ mod clipboard_backend;
 mod config;
 mod paths;
 mod preload;
+mod save_data;
 mod slot_data;
+
+use save_data::SaveData;
 
 /// The entrypoint called when the DLL is first loaded.
 ///
@@ -39,6 +42,12 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     info!("Logger initialized.");
 
     preload::preload();
+
+    // Set up hooks in the main thread to mitigate the risk of the game code
+    // isn't executing them while they're being modified.
+
+    // Safety: We only hook these functions here specifically.
+    unsafe { SaveData::hook() };
 
     std::thread::spawn(move || {
         info!("Worker thread initialized.");

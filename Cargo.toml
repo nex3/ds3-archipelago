@@ -9,6 +9,7 @@ name = "archipelago"
 
 [dependencies]
 archipelago_rs = { path = "../archipelago_rs" }
+bincode = "2.0.1"
 chrono = "0.4.42"
 clipboard-win = "5.4.1"
 darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }

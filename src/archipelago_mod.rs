@@ -1,4 +1,8 @@
+use std::time::Instant;
+
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
+use darksouls3::sprj::*;
+use darksouls3_util::item::*;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
@@ -6,6 +10,7 @@ use log::*;
 use crate::client::{ClientConnectionState::*, *};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
+use crate::save_data::*;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -18,8 +23,7 @@ const BLUE: ImColor32 = ImColor32::from_rgb(0x82, 0xA9, 0xD4);
 const MAGENTA: ImColor32 = ImColor32::from_rgb(0xBF, 0x9B, 0xBC);
 const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 
-/// The fully-initialized Archipelago mod at the whole-game level. This doesn't
-/// contain anything specific to a loaded game instance.
+/// The fully-initialized Archipelago mod at the whole-game level.
 pub struct ArchipelagoMod {
     /// The configuration for the current Archipelago connection. This is not
     /// guaranteed to be complete *or* accurate; it's the mod's responsibility
@@ -32,6 +36,16 @@ pub struct ArchipelagoMod {
 
     /// The log of prints displayed in the overlay.
     log_buffer: Vec<PrintJSON>,
+
+    /// The time we last granted an item to the player. Used to ensure we don't
+    /// give more than one item per second.
+    last_item_time: Instant,
+
+    /// The time at which we noticed the game loading (as indicated by
+    /// MapItemMan coming into existence). Used to compute the grace period
+    /// before we start doing stuff in game. None if the game is not currently
+    /// loaded.
+    load_time: Option<Instant>,
 
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
@@ -75,6 +89,8 @@ impl ArchipelagoMod {
             config,
             connection: None,
             log_buffer: vec![],
+            last_item_time: Instant::now(),
+            load_time: None,
             viewport_size: None,
             popup_url: String::new(),
             popup_slot: String::new(),
@@ -141,6 +157,15 @@ impl ArchipelagoMod {
             }
         }
 
+        // Safety: It should be safe to access the item man during a frame draw,
+        // since we're on the main thread.
+        let item_man = unsafe { MapItemMan::get_instance() };
+        if item_man.is_err() {
+            self.load_time = None;
+        } else if self.load_time.is_none() {
+            self.load_time = Some(Instant::now());
+        }
+
         if let Some(connection) = self.connection.as_mut()
             && let Connected(client) = connection.state_mut()
         {
@@ -152,6 +177,31 @@ impl ArchipelagoMod {
                 info!("[APS] {message}");
             }
             self.log_buffer.extend(new_prints);
+
+            if let Ok(item_man) = item_man {
+                // Only set save data once [MapItemMan] is loaded, because that
+                // means we're actually in a game.
+                let mut save_data = SaveData::instance_mut();
+                if save_data.is_none() {
+                    *save_data = Some(SaveData { items_granted: 0 });
+                }
+                if let Some(save_data) = save_data.as_mut()
+                    && self.last_item_time.elapsed().as_secs() >= 1
+                    // Wait a little bit after MapItemMan appears before we
+                    // start granting items.
+                    && self.load_time.is_some_and(|i| i.elapsed().as_secs() >= 10)
+                    && client.items().len() > save_data.items_granted
+                {
+                    let item = &client.items()[save_data.items_granted];
+                    item_man.grant_item(ItemBufferEntry {
+                        id: item.ds3_id(),
+                        quantity: item.quantity(),
+                        durability: -1,
+                    });
+                    save_data.items_granted += 1;
+                    self.last_item_time = Instant::now();
+                }
+            }
         }
     }
 
