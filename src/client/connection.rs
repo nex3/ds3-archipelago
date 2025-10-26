@@ -1,3 +1,4 @@
+use std::fmt;
 use std::thread;
 
 use archipelago_rs::client::*;
@@ -5,23 +6,24 @@ use archipelago_rs::protocol::*;
 use log::*;
 use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 
+use crate::client::ConnectedClient;
 use crate::slot_data::SlotData;
 
-/// A pull-based wrapper around the Archipelago client connection. All of the
-/// actual communication is done on a separate thread. The state only changes
-/// when [ArchipelagoClient.update] is called.
-pub struct ArchipelagoClientWrapper {
+/// A class that manages the Archipelago client connection in a pull-based
+/// manner. All of the actual communication is done on a separate thread. The
+/// state only changes when [ClientConnection.update] is called.
+pub struct ClientConnection {
     /// The current state of the client connection.
-    state: ArchipelagoClientState,
+    state: ClientConnectionState,
 
     /// The receiver for messages coming from the worker thread.
     rx: Receiver<Result<ServerMessage<SlotData>, ArchipelagoError>>,
 
     /// The transmitter for messages going to the worker thread.
-    tx: Sender<ClientMessage>,
-
-    /// Buffered messages waiting to be consumed by the caller.
-    messages: Vec<PrintJSON>,
+    ///
+    /// This is only retained until the [ConnectedClient] has been created, at
+    /// which point ownership is transferred there.
+    tx: Option<Sender<ClientMessage>>,
 
     /// The handle of the worker thread, used to ensure that it's dropped along
     /// with the client wrapper.
@@ -29,14 +31,14 @@ pub struct ArchipelagoClientWrapper {
 }
 
 /// The state of the underlying Archipelago client as of the last received message.
-pub enum ArchipelagoClientState {
+pub enum ClientConnectionState {
     /// The client is in the process of establishing a connection and
     /// downloading the initial data.
     Connecting,
 
     /// The client has successfully connected. This includes data that's always
     /// available with a successful connection.
-    Connected(archipelago_rs::protocol::Connected<SlotData>),
+    Connected(ConnectedClient),
 
     /// The client is not connected, either because the initial connection
     /// failed or because an established connection was later closed. This
@@ -44,7 +46,21 @@ pub enum ArchipelagoClientState {
     Disconnected(String),
 }
 
-impl ArchipelagoClientWrapper {
+impl fmt::Debug for ClientConnectionState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "{}",
+            match self {
+                ClientConnectionState::Connecting => "Connecting",
+                ClientConnectionState::Connected(_) => "Connected",
+                ClientConnectionState::Disconnected(_) => "Disconnected",
+            }
+        )
+    }
+}
+
+impl ClientConnection {
     /// Creates a new client and begins attempting to establish a connection
     /// with the given credentials.
     pub fn new(
@@ -53,7 +69,7 @@ impl ArchipelagoClientWrapper {
         password: Option<impl AsRef<str>>,
         items_handling: ItemsHandlingFlags,
         tags: Vec<String>,
-    ) -> ArchipelagoClientWrapper {
+    ) -> ClientConnection {
         let (inner_tx, outer_rx) = channel(1024);
         let (outer_tx, inner_rx) = channel(1024);
 
@@ -88,68 +104,72 @@ impl ArchipelagoClientWrapper {
             }
         });
 
-        ArchipelagoClientWrapper {
-            state: ArchipelagoClientState::Connecting,
+        ClientConnection {
+            state: ClientConnectionState::Connecting,
             rx: outer_rx,
-            tx: outer_tx,
-            messages: vec![],
+            tx: Some(outer_tx),
             _handle: handle,
         }
     }
 
     /// The current state of the client.
-    pub fn state(&self) -> &ArchipelagoClientState {
+    pub fn state(&self) -> &ClientConnectionState {
         &self.state
     }
 
-    /// Returns all Archipelago messages that have been received since the last
-    /// time this message was called.
+    /// The current state of the client.
     ///
-    /// These are only refreshed when [update] is called.
-    pub fn messages(&mut self) -> Vec<PrintJSON> {
-        std::mem::take(&mut self.messages)
-    }
-
-    /// Sends a message to the server and other clients.
-    pub fn say(&mut self, text: impl AsRef<str>) {
-        self.tx
-            .blocking_send(ClientMessage::Say(Say {
-                text: text.as_ref().to_string(),
-            }))
-            .unwrap();
+    /// This returns a mutable reference so that the caller can call mutable
+    /// methods on the [ConnectedClient], but the caller *must not* change the
+    /// state itself.
+    pub fn state_mut(&mut self) -> &mut ClientConnectionState {
+        &mut self.state
     }
 
     /// Processes any incoming messages from the worker thread and updates the
     /// client's state accordingly.
+    ///
+    /// Has no effect if this is already disconnected.
     pub fn update(&mut self) {
+        if let ClientConnectionState::Disconnected(_) = self.state {
+            return;
+        }
+
         loop {
             match self.rx.try_recv() {
                 Err(TryRecvError::Empty) => return,
                 Err(TryRecvError::Disconnected) => {
                     // We expect the client to sent a disconnect message or an
                     // error if the connection is closed.
-                    self.state = ArchipelagoClientState::Disconnected(
+                    self.state = ClientConnectionState::Disconnected(
                         "Archipelago client worker thread exited unexpectedly".to_string(),
                     );
                     return;
                 }
                 Ok(Err(err)) => {
                     warn!("Connection error: {err:?}");
-                    self.state = ArchipelagoClientState::Disconnected(err.to_string());
+                    self.state = ClientConnectionState::Disconnected(err.to_string());
                     return;
                 }
                 Ok(Ok(ServerMessage::ConnectionRefused(message))) => {
-                    self.state = ArchipelagoClientState::Disconnected(message.errors.join(", "));
+                    self.state = ClientConnectionState::Disconnected(message.errors.join(", "));
                     return;
                 }
                 Ok(Ok(ServerMessage::Connected(connected))) => {
-                    self.state = ArchipelagoClientState::Connected(connected);
+                    let tx = self.tx.take().unwrap();
+                    self.state =
+                        ClientConnectionState::Connected(ConnectedClient::new(connected, tx));
                 }
-                Ok(Ok(ServerMessage::Print(Print { text }))) => {
-                    self.messages.push(PrintJSON::message(text))
-                }
-                Ok(Ok(ServerMessage::PrintJSON(message))) => self.messages.push(message),
-                _ => (), // Ignore messages we don't care about
+                Ok(Ok(message)) => match &mut self.state {
+                    ClientConnectionState::Connected(client) => client.update(message),
+                    _ => {
+                        self.state = ClientConnectionState::Disconnected(
+                            format!("Unexpected message in {:?}: {message:?}", self.state)
+                                .to_string(),
+                        );
+                        return;
+                    }
+                },
             };
         }
     }

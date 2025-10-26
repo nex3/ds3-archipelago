@@ -3,7 +3,7 @@ use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
 
-use crate::archipelago_client_wrapper::{ArchipelagoClientState::*, ArchipelagoClientWrapper};
+use crate::client::{ClientConnectionState::*, *};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
 
@@ -28,9 +28,9 @@ pub struct ArchipelagoMod {
     config: Config,
 
     /// The Archipelago client connection, if it's connected.
-    client: Option<ArchipelagoClientWrapper>,
+    connection: Option<ClientConnection>,
 
-    /// The log of messages displayed in the overlay.
+    /// The log of prints displayed in the overlay.
     log_buffer: Vec<PrintJSON>,
 
     /// The last-known size of the viewport. This is only set once hudhook has
@@ -73,7 +73,7 @@ impl ArchipelagoMod {
 
         let mut ap_mod = ArchipelagoMod {
             config,
-            client: None,
+            connection: None,
             log_buffer: vec![],
             viewport_size: None,
             popup_url: String::new(),
@@ -92,66 +92,89 @@ impl ArchipelagoMod {
     }
 
     /// Returns the simplified connection state for [client].
-    fn simple_client_state(&self) -> SimpleClientState {
-        if let Some(client) = &self.client {
-            match client.state() {
-                Disconnected(_) => SimpleClientState::Disconnected,
-                Connecting => SimpleClientState::Connecting,
-                Connected(_) => SimpleClientState::Connected,
+    fn simple_connection_state(&self) -> SimpleConnectionState {
+        if let Some(connection) = self.connection.as_ref() {
+            match connection.state() {
+                Disconnected(_) => SimpleConnectionState::Disconnected,
+                Connecting => SimpleConnectionState::Connecting,
+                Connected(_) => SimpleConnectionState::Connected,
             }
         } else {
-            SimpleClientState::Disconnected
+            SimpleConnectionState::Disconnected
+        }
+    }
+
+    /// Returns a reference to the Archipelago client, if it's connected.
+    fn client(&self) -> Option<&ConnectedClient> {
+        if let Some(connection) = self.connection.as_ref() {
+            match connection.state() {
+                Connected(client) => Some(client),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Returns a reference to the Archipelago client, if it's connected.
+    fn client_mut(&mut self) -> Option<&mut ConnectedClient> {
+        if let Some(connection) = self.connection.as_mut() {
+            match connection.state_mut() {
+                Connected(client) => Some(client),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 
     /// A function that's run just before rendering the overlay UI in every
     /// frame render. This is where the core logic of the mod takes place.
     fn tick(&mut self) {
-        // We can't pattern match here because we need to use self.client
+        // We can't pattern match here because we need to use self.connection
         // mutably while also calling `self.log()` which is a different mutable
         // self borrow.
-        if self.client.is_some() {
-            let old_state = self.simple_client_state();
+        if self.connection.is_some() {
+            let old_state = self.simple_connection_state();
 
             {
-                let client = self.client.as_mut().unwrap();
-                client.update();
-                let new_messages = client.messages();
-                if new_messages.len() > 0 {
-                    self.frames_since_new_logs = 0;
-                }
-                for message in &new_messages {
-                    info!("[APS] {message}");
-                }
-                self.log_buffer.extend(new_messages);
+                let connection = self.connection.as_mut().unwrap();
+                connection.update();
             }
 
-            if let Disconnected(err) = self.client.as_ref().unwrap().state() {
+            if let Disconnected(err) = self.connection.as_ref().unwrap().state() {
                 match old_state {
-                    SimpleClientState::Connecting => {
+                    SimpleConnectionState::Connecting => {
                         self.log(format!("Connection failed: {}", err));
                     }
-                    SimpleClientState::Connected => self.log(format!("Disconnected: {}", err)),
+                    SimpleConnectionState::Connected => self.log(format!("Disconnected: {}", err)),
                     _ => {}
                 }
             }
+        }
+
+        if let Some(client) = self.client_mut() {
+            let new_prints = client.prints();
+            if new_prints.len() > 0 {
+                self.frames_since_new_logs = 0;
+            }
+            for message in &new_prints {
+                info!("[APS] {message}");
+            }
+            self.log_buffer.extend(new_prints);
         }
     }
 
     /// The player's slot ID, if it's known.
     fn slot(&self) -> Option<i32> {
-        let client = self.client.as_ref()?;
-        let Connected(connected) = client.state() else {
-            return None;
-        };
-        Some(connected.slot)
+        Some(self.client()?.connected().slot)
     }
 
     /// Initiates a new connection to the Archipelago server based on the data
     /// in the [config]. As a precondition, this requires the config's URL and
     /// slot to be set.
     fn connect(&mut self) {
-        self.client = Some(ArchipelagoClientWrapper::new(
+        self.connection = Some(ClientConnection::new(
             self.config.url().unwrap(),
             self.config.slot().unwrap(),
             self.config.password(),
@@ -221,10 +244,10 @@ impl ArchipelagoMod {
     fn render_connection_widget(&mut self, ui: &Ui) {
         ui.text("Connection status:");
         ui.same_line();
-        match self.simple_client_state() {
-            SimpleClientState::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
-            SimpleClientState::Connecting => ui.text("Connecting..."),
-            SimpleClientState::Disconnected => {
+        match self.simple_connection_state() {
+            SimpleConnectionState::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
+            SimpleConnectionState::Connecting => ui.text("Connecting..."),
+            SimpleConnectionState::Disconnected => {
                 ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
                 ui.same_line();
                 if ui.button("Connect") {
@@ -237,7 +260,7 @@ impl ArchipelagoMod {
         }
     }
 
-    /// Renders the log window which displays all the messages sent from the server.
+    /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
         ui.child_window("#log")
             .size([0.0, -33.])
@@ -250,7 +273,7 @@ impl ArchipelagoMod {
                     write_message_data(
                         ui,
                         &message.data(),
-                        // De-emphasize miscellaneous server messages.
+                        // De-emphasize miscellaneous server prints.
                         match message {
                             Chat { .. }
                             | ServerChat { .. }
@@ -278,7 +301,7 @@ impl ArchipelagoMod {
 
     /// Renders the text box in which users can write chats to the server.
     fn render_say_input(&mut self, ui: &Ui) {
-        ui.disabled(self.client.is_none(), || {
+        ui.disabled(self.client().is_none(), || {
             let width = ui.push_item_width(-40.);
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
@@ -291,8 +314,11 @@ impl ArchipelagoMod {
             send = ui.arrow_button("##say-button", Direction::Right) || send;
             drop(width);
 
-            if send {
-                self.client.as_mut().unwrap().say(&self.say_input);
+            if send
+                && let Some(connection) = self.connection.as_mut()
+                && let Connected(client) = connection.state_mut()
+            {
+                client.say(&self.say_input);
                 self.say_input.clear();
             }
         });
@@ -356,9 +382,9 @@ impl ImColor32Ext for ImColor32 {
     }
 }
 
-/// A simplification of [ArchipelagoClientState] that doesn't contain any
+/// A simplification of [ClientConnectionState] that doesn't contain any
 /// actual data and thus doesn't need to worry about lifetimes.
-enum SimpleClientState {
+enum SimpleConnectionState {
     Disconnected,
     Connecting,
     Connected,

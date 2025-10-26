@@ -14,8 +14,8 @@ use windows::Win32::{
 };
 use windows::core::*;
 
-mod archipelago_client_wrapper;
 mod archipelago_mod;
+mod client;
 mod clipboard_backend;
 mod config;
 mod paths;
