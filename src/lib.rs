@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::prelude::*;
-use eldenring_util::system::wait_for_system_init;
+use darksouls3_util::system::wait_for_system_init;
 use fromsoftware_shared::program::Program;
 use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
