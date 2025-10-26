@@ -116,18 +116,6 @@ impl ArchipelagoMod {
         }
     }
 
-    /// Returns a reference to the Archipelago client, if it's connected.
-    fn client_mut(&mut self) -> Option<&mut ConnectedClient> {
-        if let Some(connection) = self.connection.as_mut() {
-            match connection.state_mut() {
-                Connected(client) => Some(client),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
     /// A function that's run just before rendering the overlay UI in every
     /// frame render. This is where the core logic of the mod takes place.
     fn tick(&mut self) {
@@ -153,7 +141,9 @@ impl ArchipelagoMod {
             }
         }
 
-        if let Some(client) = self.client_mut() {
+        if let Some(connection) = self.connection.as_mut()
+            && let Connected(client) = connection.state_mut()
+        {
             let new_prints = client.prints();
             if new_prints.len() > 0 {
                 self.frames_since_new_logs = 0;
@@ -178,7 +168,7 @@ impl ArchipelagoMod {
             self.config.url().unwrap(),
             self.config.slot().unwrap(),
             self.config.password(),
-            ItemsHandlingFlags::empty(),
+            ItemsHandlingFlags::OTHER_WORLDS & ItemsHandlingFlags::STARTING_INVENTORY,
             vec![],
         ));
     }

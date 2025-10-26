@@ -1,7 +1,8 @@
 use archipelago_rs::protocol::*;
 use tokio::sync::mpsc::Sender;
 
-use crate::slot_data::SlotData;
+use crate::client::{GameDataWrapper, Item};
+use crate::slot_data::{I64Key, SlotData};
 
 /// A pull-based client representing an established, active Archipelago
 /// connection. All of the actual communication is done on a separate thread.
@@ -11,8 +12,14 @@ pub struct ConnectedClient {
     /// The information provided upon the initial connection.
     connected: archipelago_rs::protocol::Connected<SlotData>,
 
+    /// The game data for Dark Souls III.
+    game_data: GameDataWrapper,
+
     /// The transmitter for messages going to the worker thread.
     tx: Sender<ClientMessage>,
+
+    /// Buffered received items waiting to be consumed by the caller.
+    items: Vec<Item>,
 
     /// Buffered prints waiting to be consumed by the caller.
     prints: Vec<PrintJSON>,
@@ -23,11 +30,14 @@ impl ConnectedClient {
     /// with the given credentials.
     pub(super) fn new(
         connected: archipelago_rs::protocol::Connected<SlotData>,
+        game_data: GameDataWrapper,
         tx: Sender<ClientMessage>,
     ) -> ConnectedClient {
         ConnectedClient {
             connected,
+            game_data,
             tx,
+            items: vec![],
             prints: vec![],
         }
     }
@@ -35,6 +45,12 @@ impl ConnectedClient {
     /// The information provided upon the initial connection.
     pub fn connected(&self) -> &archipelago_rs::protocol::Connected<SlotData> {
         &self.connected
+    }
+
+    /// Returns all Archipelago items that have been received by the player
+    /// during their entire run of the game.
+    pub fn items(&self) -> &[Item] {
+        self.items.as_ref()
     }
 
     /// Returns all Archipelago prints that have been received since the last
@@ -58,6 +74,27 @@ impl ConnectedClient {
     /// client's state accordingly.
     pub(super) fn update(&mut self, message: ServerMessage<SlotData>) {
         match message {
+            ServerMessage::ReceivedItems(message) => {
+                self.items.extend(message.items.into_iter().map(|ap| {
+                    let name = self.game_data.item_name(ap.item);
+                    let location = self.game_data.location_name(ap.location);
+                    let id_key = I64Key(ap.item);
+                    let ds3_id = self
+                        .connected
+                        .slot_data
+                        .ap_ids_to_item_ids
+                        .get(&id_key)
+                        .expect("Archipelago ID should have a DS3 ID defined in slot data");
+                    let quantity = self
+                        .connected
+                        .slot_data
+                        .item_counts
+                        .get(&id_key)
+                        .map(|n| *n)
+                        .unwrap_or(1);
+                    Item::new(ap, name, location, ds3_id.0, quantity)
+                }))
+            }
             ServerMessage::Print(Print { text }) => self.prints.push(PrintJSON::message(text)),
             ServerMessage::PrintJSON(message) => self.prints.push(message),
             _ => (), // Ignore messages we don't care about

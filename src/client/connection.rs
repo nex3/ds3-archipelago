@@ -6,8 +6,10 @@ use archipelago_rs::protocol::*;
 use log::*;
 use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 
-use crate::client::ConnectedClient;
+use crate::client::{ConnectedClient, GameDataWrapper};
 use crate::slot_data::SlotData;
+
+const GAME_NAME: &str = "Dark Souls III";
 
 /// A class that manages the Archipelago client connection in a pull-based
 /// manner. All of the actual communication is done on a separate thread. The
@@ -18,6 +20,11 @@ pub struct ClientConnection {
 
     /// The receiver for messages coming from the worker thread.
     rx: Receiver<Result<ServerMessage<SlotData>, ArchipelagoError>>,
+
+    /// The game data for Dark Souls III. This is only set during a subset of
+    /// [ClientConnectionState::Connecting], after which point ownership is
+    /// passed to [ConnectedClient].
+    game_data: Option<GameDataWrapper>,
 
     /// The transmitter for messages going to the worker thread.
     ///
@@ -107,6 +114,7 @@ impl ClientConnection {
         ClientConnection {
             state: ClientConnectionState::Connecting,
             rx: outer_rx,
+            game_data: None,
             tx: Some(outer_tx),
             _handle: handle,
         }
@@ -155,10 +163,24 @@ impl ClientConnection {
                     self.state = ClientConnectionState::Disconnected(message.errors.join(", "));
                     return;
                 }
+                Ok(Ok(ServerMessage::DataPackage(mut data_package))) => {
+                    self.game_data = Some(GameDataWrapper::new(
+                        data_package
+                            .data
+                            .games
+                            .remove(GAME_NAME)
+                            .expect("Expected game data for Dark Souls III"),
+                    ));
+                }
                 Ok(Ok(ServerMessage::Connected(connected))) => {
                     let tx = self.tx.take().unwrap();
-                    self.state =
-                        ClientConnectionState::Connected(ConnectedClient::new(connected, tx));
+                    let game_data = self
+                        .game_data
+                        .take()
+                        .expect("Expected game data to be received before Connected");
+                    self.state = ClientConnectionState::Connected(ConnectedClient::new(
+                        connected, game_data, tx,
+                    ));
                 }
                 Ok(Ok(message)) => match &mut self.state {
                     ClientConnectionState::Connected(client) => client.update(message),
@@ -185,7 +207,35 @@ async fn run_worker(
     inner_tx: &Sender<Result<ServerMessage<SlotData>, ArchipelagoError>>,
     mut inner_rx: Receiver<ClientMessage>,
 ) -> Result<(), ArchipelagoError> {
+    // Don't use with_data_package because we want to take and transfer
+    // ownership of the data package rather than storing it in the wrapped
+    // client.
     let mut client = ArchipelagoClient::<SlotData>::new(url).await?;
+
+    client
+        .send(ClientMessage::GetDataPackage(GetDataPackage {
+            games: Some(vec![GAME_NAME.to_string()]),
+        }))
+        .await?;
+    let response = client.recv().await?;
+    let data_package = match response {
+        Some(ServerMessage::DataPackage(pkg)) => pkg,
+        Some(received) => {
+            return Err(ArchipelagoError::IllegalResponse {
+                expected: "Data package",
+                received: received.type_name(),
+            });
+        }
+        None => return Err(ArchipelagoError::ConnectionClosed),
+    };
+
+    let Ok(_) = inner_tx
+        .send(Ok(ServerMessage::DataPackage(data_package)))
+        .await
+    else {
+        return Ok(());
+    };
+
     let connected = client
         .connect("Dark Souls III", slot, password, items_handling, tags)
         .await?;
