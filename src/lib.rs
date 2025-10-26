@@ -19,7 +19,6 @@ mod client;
 mod clipboard_backend;
 mod config;
 mod paths;
-mod preload;
 mod save_data;
 mod slot_data;
 
@@ -40,8 +39,6 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     start_logger(&*paths::MOD_DIRECTORY);
 
     info!("Logger initialized.");
-
-    preload::preload();
 
     // Set up hooks in the main thread to mitigate the risk of the game code
     // isn't executing them while they're being modified.
