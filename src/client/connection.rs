@@ -21,6 +21,11 @@ pub struct ClientConnection {
     /// The receiver for messages coming from the worker thread.
     rx: Receiver<Result<ServerMessage<SlotData>, ArchipelagoError>>,
 
+    /// The room info for the current connection. This is only set during a
+    /// subset of [ClientConnectionState::Connecting], after which point
+    /// ownership is passed to [ConnectedClient].
+    room_info: Option<RoomInfo>,
+
     /// The game data for Dark Souls III. This is only set during a subset of
     /// [ClientConnectionState::Connecting], after which point ownership is
     /// passed to [ConnectedClient].
@@ -114,6 +119,7 @@ impl ClientConnection {
         ClientConnection {
             state: ClientConnectionState::Connecting,
             rx: outer_rx,
+            room_info: None,
             game_data: None,
             tx: Some(outer_tx),
             _handle: handle,
@@ -163,6 +169,7 @@ impl ClientConnection {
                     self.state = ClientConnectionState::Disconnected(message.errors.join(", "));
                     return;
                 }
+                Ok(Ok(ServerMessage::RoomInfo(room_info))) => self.room_info = Some(room_info),
                 Ok(Ok(ServerMessage::DataPackage(mut data_package))) => {
                     self.game_data = Some(GameDataWrapper::new(
                         data_package
@@ -178,8 +185,12 @@ impl ClientConnection {
                         .game_data
                         .take()
                         .expect("Expected game data to be received before Connected");
+                    let room_info = self
+                        .room_info
+                        .take()
+                        .expect("Expected room info to be received before Connected");
                     self.state = ClientConnectionState::Connected(ConnectedClient::new(
-                        connected, game_data, tx,
+                        connected, room_info, game_data, tx,
                     ));
                 }
                 Ok(Ok(message)) => match &mut self.state {
@@ -211,6 +222,13 @@ async fn run_worker(
     // ownership of the data package rather than storing it in the wrapped
     // client.
     let mut client = ArchipelagoClient::<SlotData>::new(url).await?;
+
+    let Ok(_) = inner_tx
+        .send(Ok(ServerMessage::RoomInfo(client.room_info().clone())))
+        .await
+    else {
+        return Ok(());
+    };
 
     client
         .send(ClientMessage::GetDataPackage(GetDataPackage {

@@ -12,6 +12,9 @@ pub struct ConnectedClient {
     /// The information provided upon the initial connection.
     connected: archipelago_rs::protocol::Connected<SlotData>,
 
+    /// The room info for the current connection.
+    room_info: RoomInfo,
+
     /// The game data for Dark Souls III.
     game_data: GameDataWrapper,
 
@@ -30,11 +33,13 @@ impl ConnectedClient {
     /// with the given credentials.
     pub(super) fn new(
         connected: archipelago_rs::protocol::Connected<SlotData>,
+        room_info: RoomInfo,
         game_data: GameDataWrapper,
         tx: Sender<ClientMessage>,
     ) -> ConnectedClient {
         ConnectedClient {
             connected,
+            room_info,
             game_data,
             tx,
             items: vec![],
@@ -45,6 +50,11 @@ impl ConnectedClient {
     /// The information provided upon the initial connection.
     pub fn connected(&self) -> &archipelago_rs::protocol::Connected<SlotData> {
         &self.connected
+    }
+
+    /// The room information for the current session.
+    pub fn room_info(&self) -> &RoomInfo {
+        &self.room_info
     }
 
     /// Returns all Archipelago items that have been received by the player

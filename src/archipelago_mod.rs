@@ -3,6 +3,7 @@ use std::time::Instant;
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 use darksouls3::sprj::*;
 use darksouls3_util::item::*;
+use fromsoftware_shared::GetInstanceResult;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
@@ -166,71 +167,105 @@ impl ArchipelagoMod {
             self.load_time = Some(Instant::now());
         }
 
-        if let Some(connection) = self.connection.as_mut()
-            && let Connected(client) = connection.state_mut()
-        {
-            let new_prints = client.prints();
-            if new_prints.len() > 0 {
-                self.frames_since_new_logs = 0;
-            }
-            for message in &new_prints {
-                info!("[APS] {message}");
-            }
-            self.log_buffer.extend(new_prints);
+        self.process_new_prints();
 
-            if let Ok(item_man) = item_man {
-                // Only set save data once [MapItemMan] is loaded, because that
-                // means we're actually in a game.
-                let mut save_data = SaveData::instance_mut();
-                if save_data.is_none() {
-                    *save_data = Some(SaveData { items_granted: 0 });
-                }
-                if let Some(save_data) = save_data.as_mut()
-                    && self.last_item_time.elapsed().as_secs() >= 1
-                    // Wait a little bit after MapItemMan appears before we
-                    // start granting items.
-                    && self.load_time.is_some_and(|i| i.elapsed().as_secs() >= 10)
-                {
-                    if client.items().len() > save_data.items_granted {
-                        let item = &client.items()[save_data.items_granted];
-                        item_man.grant_item(ItemBufferEntry {
-                            id: item.ds3_id(),
-                            quantity: item.quantity(),
-                            durability: -1,
-                        });
-                        save_data.items_granted += 1;
-                        self.last_item_time = Instant::now();
-                    }
-                    // Make sure that there are items queued up to add before we
-                    // invalidate the previous list of items. This avoids a race
-                    // condition where we might think [SaveData.items_granted]
-                    // was too large before we received the initial list of
-                    // items in the first place.
-                    else if client.items().len() > 0
-                        && client.items().len() < save_data.items_granted
-                    {
-                        let message = format!(
-                            "The number of items your save has recorded ({}) \
-                             is greater than the number of items Archipelago \
-                             thinks you've received ({}). This probably means \
-                             that your local Archipelago save has been \
-                             corrupted. The client will fix this \
-                             automatically, but you'll end up receiving all \
-                             your items again.",
-                            save_data.items_granted,
-                            client.items().len(),
-                        );
-                        warn!("{}", message);
-                        self.log_buffer.push(PrintJSON::Unknown {
-                            data: vec![JSONMessagePart::Color {
-                                text: "Warning:".to_string(),
-                                color: JSONColor::Red,
-                            }],
-                        });
-                        save_data.items_granted = 0;
-                    }
-                }
-            }
+        // If there's an unresolved conflict between the saved and connected
+        // seeds, don't make any changes until it's resolved.
+        if let Some(connection) = self.connection.as_ref()
+            && let Connected(client) = connection.state()
+            && let Some(save_data) = SaveData::instance().as_ref()
+            && save_data.seed != client.room_info().seed_name
+        {
+            return;
+        }
+
+        self.process_items(item_man);
+    }
+
+    /// Handle new prints that come from the Archipelago server.
+    fn process_new_prints(&mut self) {
+        let Some(connection) = self.connection.as_mut() else {
+            return;
+        };
+        let Connected(client) = connection.state_mut() else {
+            return;
+        };
+
+        let new_prints = client.prints();
+        if new_prints.len() > 0 {
+            self.frames_since_new_logs = 0;
+        }
+        for message in &new_prints {
+            info!("[APS] {message}");
+        }
+        self.log_buffer.extend(new_prints);
+    }
+
+    /// Handle new items, distributing them to the player when appropriate. This
+    /// also initializes the [SaveData] for a new file.
+    fn process_items(&mut self, item_man: GetInstanceResult<&mut MapItemMan>) {
+        let Some(connection) = self.connection.as_mut() else {
+            return;
+        };
+        let Connected(client) = connection.state_mut() else {
+            return;
+        };
+        let Ok(item_man) = item_man else {
+            return;
+        };
+
+        // Only set save data once [MapItemMan] is loaded, because that
+        // means we're actually in a game.
+        let mut save_data = SaveData::instance_mut();
+        if save_data.is_none() {
+            *save_data = Some(SaveData {
+                items_granted: 0,
+                seed: client.room_info().seed_name.clone(),
+            });
+        }
+        let save_data = save_data.as_mut().unwrap();
+
+        // Wait a second between each item grant, and 10 seconds after we load
+        // in before we start granting items at all.
+        if self.last_item_time.elapsed().as_secs() < 1
+            || self.load_time.is_none_or(|i| i.elapsed().as_secs() < 10)
+        {
+            return;
+        }
+
+        if client.items().len() > save_data.items_granted {
+            let item = &client.items()[save_data.items_granted];
+            item_man.grant_item(ItemBufferEntry {
+                id: item.ds3_id(),
+                quantity: item.quantity(),
+                durability: -1,
+            });
+            save_data.items_granted += 1;
+            self.last_item_time = Instant::now();
+        }
+        // Make sure that there are items queued up to add before we
+        // invalidate the previous list of items. This avoids a race
+        // condition where we might think [SaveData.items_granted]
+        // was too large before we received the initial list of
+        // items in the first place.
+        else if client.items().len() > 0 && client.items().len() < save_data.items_granted {
+            let message = format!(
+                "The number of items your save has recorded ({}) is greater \
+                 than the number of items Archipelago thinks you've received \
+                 ({}). This probably means that your local Archipelago save \
+                 has been corrupted. The client will fix this automatically, \
+                 but you'll end up receiving all your items again.",
+                save_data.items_granted,
+                client.items().len(),
+            );
+            warn!("{}", message);
+            self.log_buffer.push(PrintJSON::Unknown {
+                data: vec![JSONMessagePart::Color {
+                    text: "Warning:".to_string(),
+                    color: JSONColor::Red,
+                }],
+            });
+            save_data.items_granted = 0;
         }
     }
 
@@ -392,6 +427,66 @@ impl ArchipelagoMod {
             }
         });
     }
+
+    /// Renders the popup window alerting the user that their connected seed
+    /// doesn't match their saved seed.
+    fn render_seed_conflict_popup(&mut self, ui: &Ui) {
+        let Some(connection) = self.connection.as_ref() else {
+            return;
+        };
+        let Connected(client) = connection.state() else {
+            return;
+        };
+        let mut save_data = SaveData::instance_mut();
+        let Some(save_data) = save_data.as_mut() else {
+            return;
+        };
+        if save_data.seed == client.room_info().seed_name {
+            return;
+        }
+
+        ui.open_popup("#seed-conflict");
+        ui.modal_popup_config("#seed-conflict")
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .build(|| {
+                // Without a wrapper window, the size of the popup ends up
+                // narrow and tall. There seems to be no way to control this
+                // directly with the Rust UI.
+                let Some(_tok) = ui.child_window("#seed-conflict-window")
+                    .size([600., 250.])
+                    .begin() else {
+                        return;
+                    };
+                ui.set_window_font_scale(1.8);
+
+                ui.text_wrapped(format!(
+                    "You've connected to a different Archipelago multiworld \
+                     than the one that you used before with this save!\n\
+                     \n\
+		     Save file seed: {}\n\
+		     Connected room seed: {}\n\
+		     \n\
+		     Continue connecting and overwrite the save file seed?",
+                    save_data.seed,
+                    client.room_info().seed_name,
+                ));
+
+                if ui.button("Overwrite") {
+                    save_data.seed = client.room_info().seed_name.clone();
+                    return;
+                }
+
+                ui.same_line_with_spacing(0., 20.);
+                if ui.button("Exit") {
+                    // TODO: It would be cool if we could quit out of the save
+                    // file to the main menu rather than outright killing the
+                    // program. There may be something in GameMan for that...
+                    std::process::exit(1);
+                }
+            });
+    }
 }
 
 impl ImguiRenderLoop for ArchipelagoMod {
@@ -412,14 +507,14 @@ impl ImguiRenderLoop for ArchipelagoMod {
             .position_pivot([1., 0.])
             .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
             .build(|| {
-                let scale = 1.8;
-                ui.set_window_font_scale(scale);
+                ui.set_window_font_scale(1.8);
 
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
                 self.render_connection_popup(ui);
                 self.render_say_input(ui);
+                self.render_seed_conflict_popup(ui);
             });
     }
 

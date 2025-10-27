@@ -18,6 +18,11 @@ pub struct SaveData {
     /// The number of items that have been granted to the player in this
     /// particular save.
     pub items_granted: usize,
+
+    /// The Archipelago seed this save file was last connected to. This is used
+    /// to verify that the player doesn't accidentally corrupt a save by loading
+    /// into it while connected to the wrong multiworld.
+    pub seed: String,
 }
 
 impl SaveData {
