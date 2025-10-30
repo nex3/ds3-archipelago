@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 use darksouls3::sprj::*;
-use darksouls3_util::item::*;
+use darksouls3_util::{input::InputBlocker, item::*};
 use fromsoftware_shared::GetInstanceResult;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
@@ -48,6 +48,9 @@ pub struct ArchipelagoMod {
     /// loaded.
     load_time: Option<Instant>,
 
+    /// The struct that's used to block and unblock input going to DS3.
+    input_blocker: &'static InputBlocker,
+
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
@@ -80,7 +83,7 @@ unsafe impl Sync for ArchipelagoMod {}
 
 impl ArchipelagoMod {
     /// Creates a new instance of the mod.
-    pub fn new() -> Self {
+    pub fn new(input_blocker: &'static InputBlocker) -> ArchipelagoMod {
         let config = match Config::load_or_default() {
             Ok(config) => config,
             Err(e) => panic!("Failed to load config: {e:?}"),
@@ -92,6 +95,7 @@ impl ArchipelagoMod {
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,
+            input_blocker,
             viewport_size: None,
             popup_url: String::new(),
             popup_slot: String::new(),
@@ -492,6 +496,13 @@ impl ArchipelagoMod {
 impl ImguiRenderLoop for ArchipelagoMod {
     fn render(&mut self, ui: &mut Ui) {
         self.tick();
+
+        let io = ui.io();
+        if io.want_capture_mouse || io.want_capture_keyboard {
+            self.input_blocker.block_mouse_and_keyboard(true);
+        } else {
+            self.input_blocker.block_mouse_and_keyboard(false);
+        }
 
         let Some(viewport_size) = self.viewport_size else {
             // Work around veeenu/hudhook#235
