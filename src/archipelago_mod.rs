@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 use darksouls3::sprj::*;
-use darksouls3_util::item::*;
+use darksouls3_util::{input::*, item::*};
 use fromsoftware_shared::GetInstanceResult;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
@@ -48,6 +48,9 @@ pub struct ArchipelagoMod {
     /// loaded.
     load_time: Option<Instant>,
 
+    /// The struct that's used to block and unblock input going to DS3.
+    input_blocker: &'static InputBlocker,
+
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
@@ -80,7 +83,7 @@ unsafe impl Sync for ArchipelagoMod {}
 
 impl ArchipelagoMod {
     /// Creates a new instance of the mod.
-    pub fn new() -> Self {
+    pub fn new(input_blocker: &'static InputBlocker) -> ArchipelagoMod {
         let config = match Config::load_or_default() {
             Ok(config) => config,
             Err(e) => panic!("Failed to load config: {e:?}"),
@@ -92,6 +95,7 @@ impl ArchipelagoMod {
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,
+            input_blocker,
             viewport_size: None,
             popup_url: String::new(),
             popup_slot: String::new(),
@@ -454,11 +458,13 @@ impl ArchipelagoMod {
                 // Without a wrapper window, the size of the popup ends up
                 // narrow and tall. There seems to be no way to control this
                 // directly with the Rust UI.
-                let Some(_tok) = ui.child_window("#seed-conflict-window")
+                let Some(_tok) = ui
+                    .child_window("#seed-conflict-window")
                     .size([600., 250.])
-                    .begin() else {
-                        return;
-                    };
+                    .begin()
+                else {
+                    return;
+                };
                 ui.set_window_font_scale(1.8);
 
                 ui.text_wrapped(format!(
@@ -492,6 +498,21 @@ impl ArchipelagoMod {
 impl ImguiRenderLoop for ArchipelagoMod {
     fn render(&mut self, ui: &mut Ui) {
         self.tick();
+
+        let io = ui.io();
+        let mut flag = InputFlags::empty();
+        if io.want_capture_mouse {
+            flag = flag | InputFlags::Mouse;
+        }
+        if io.want_capture_keyboard {
+            flag = flag | InputFlags::Keyboard;
+        }
+        if io.want_capture_mouse && io.want_capture_keyboard {
+            // Only block pad input if both the mouse and keyboard are blocked
+            // (for example if a modal dialog is up).
+            flag = flag | InputFlags::GamePad;
+        }
+        self.input_blocker.block_only(flag);
 
         let Some(viewport_size) = self.viewport_size else {
             // Work around veeenu/hudhook#235

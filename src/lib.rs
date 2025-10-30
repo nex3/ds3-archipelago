@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::prelude::*;
-use darksouls3_util::system::wait_for_system_init;
+use darksouls3_util::{input::InputBlocker, system::wait_for_system_init};
 use fromsoftware_shared::program::Program;
 use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
@@ -46,6 +46,9 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     // Safety: We only hook these functions here specifically.
     unsafe { SaveData::hook() };
 
+    let blocker =
+        unsafe { InputBlocker::get_instance() }.expect("Failed to initialize input blocker");
+
     std::thread::spawn(move || {
         info!("Worker thread initialized.");
         wait_for_system_init(&Program::current(), Duration::MAX)
@@ -54,7 +57,7 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
         info!("Game system initialized.");
 
         if let Err(e) = Hudhook::builder()
-            .with::<ImguiDx11Hooks>(archipelago_mod::ArchipelagoMod::new())
+            .with::<ImguiDx11Hooks>(archipelago_mod::ArchipelagoMod::new(blocker))
             .with_hmodule(hmodule)
             .build()
             .apply()

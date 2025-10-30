@@ -31,7 +31,3 @@ features = [
     "Win32_System_SystemServices",
     "Win32_UI_WindowsAndMessaging",
 ]
-
-[patch.crates-io]
-# https://github.com/CasualX/pelite/issues/287
-pelite = { git = "https://github.com/CasualX/pelite.git" }
