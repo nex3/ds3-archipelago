@@ -2,8 +2,8 @@ use std::time::Instant;
 
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
 use darksouls3::sprj::*;
-use darksouls3_util::{input::*, item::*};
-use fromsoftware_shared::GetInstanceResult;
+use darksouls3::util::input::*;
+use fromsoftware_shared::{FromStatic, InstanceResult};
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
@@ -164,7 +164,7 @@ impl ArchipelagoMod {
 
         // Safety: It should be safe to access the item man during a frame draw,
         // since we're on the main thread.
-        let item_man = unsafe { MapItemMan::get_instance() };
+        let item_man = unsafe { MapItemMan::instance() };
         if item_man.is_err() {
             self.load_time = None;
         } else if self.load_time.is_none() {
@@ -207,7 +207,7 @@ impl ArchipelagoMod {
 
     /// Handle new items, distributing them to the player when appropriate. This
     /// also initializes the [SaveData] for a new file.
-    fn process_items(&mut self, item_man: GetInstanceResult<&mut MapItemMan>) {
+    fn process_items(&mut self, item_man: InstanceResult<&mut MapItemMan>) {
         let Some(connection) = self.connection.as_mut() else {
             return;
         };

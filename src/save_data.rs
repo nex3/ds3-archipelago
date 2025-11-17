@@ -2,7 +2,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use bincode;
 use bincode::{Decode, Encode};
-use darksouls3_util::save;
+use darksouls3::util::save;
 use log::*;
 
 /// The singleton instance of the save data, or None if it hasn't been loaded

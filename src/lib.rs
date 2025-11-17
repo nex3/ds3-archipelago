@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::prelude::*;
-use darksouls3_util::{input::InputBlocker, system::wait_for_system_init};
+use darksouls3::util::{input::InputBlocker, system::wait_for_system_init};
 use fromsoftware_shared::program::Program;
 use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
