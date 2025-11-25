@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use bincode;
@@ -15,9 +16,9 @@ const CONFIG: bincode::config::Configuration = bincode::config::standard();
 /// Data that's saved and loaded along with the player's game save.
 #[derive(Debug, Decode, Encode)]
 pub struct SaveData {
-    /// The number of items that have been granted to the player in this
-    /// particular save.
-    pub items_granted: usize,
+    /// The set of all Archipelago item IDs that have been granted to this
+    /// player from foreign games throughout the course of this run.
+    pub items_granted: HashSet<i64>,
 
     /// The Archipelago seed this save file was last connected to. This is used
     /// to verify that the player doesn't accidentally corrupt a save by loading
@@ -75,7 +76,7 @@ impl SaveData {
     }
 
     /// Returns a read-only reference to the singleton [SaveData], or None if it
-    /// hasn't been set yet (either from a save file or using [instance_mut].
+    /// hasn't been set yet (either from a save file or using [instance_mut]).
     pub fn instance<'a>() -> RwLockReadGuard<'a, Option<Self>> {
         INSTANCE.read().unwrap()
     }
