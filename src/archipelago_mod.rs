@@ -173,14 +173,20 @@ impl ArchipelagoMod {
 
         self.process_new_prints();
 
-        // If there's an unresolved conflict between the saved and connected
-        // seeds, don't make any changes until it's resolved.
         if let Some(connection) = self.connection.as_ref()
             && let Connected(client) = connection.state()
-            && let Some(save_data) = SaveData::instance().as_ref()
-            && save_data.seed != client.room_info().seed_name
+            && let Some(save_data) = SaveData::instance_mut().as_mut()
         {
-            return;
+            if save_data.seed.is_none() {
+                // If the connection seed exists and the saved seed doesn't,
+                // we're presumably on a new file. Write the connection seed to
+                // the save data so we can surface conflicts in the future.
+                save_data.seed = Some(client.room_info().seed_name.clone());
+            } else if !save_data.seed_matches(&client.room_info().seed_name) {
+                // If there's an unresolved conflict between the saved and
+                // connected seeds, don't make any changes until it's resolved.
+                return;
+            }
         }
 
         self.process_items(item_man);
@@ -217,17 +223,10 @@ impl ArchipelagoMod {
         let Ok(item_man) = item_man else {
             return;
         };
-
-        // Only set save data once [MapItemMan] is loaded, because that
-        // means we're actually in a game.
         let mut save_data = SaveData::instance_mut();
-        if save_data.is_none() {
-            *save_data = Some(SaveData {
-                items_granted: Default::default(),
-                seed: client.room_info().seed_name.clone(),
-            });
-        }
-        let save_data = save_data.as_mut().unwrap();
+        let Some(save_data) = save_data.as_mut() else {
+            return;
+        };
 
         // Wait a second between each item grant, and 10 seconds after we load
         // in before we start granting items at all.
@@ -423,7 +422,7 @@ impl ArchipelagoMod {
         let Some(save_data) = save_data.as_mut() else {
             return;
         };
-        if save_data.seed == client.room_info().seed_name {
+        if save_data.seed_matches(&client.room_info().seed_name) {
             return;
         }
 
@@ -453,12 +452,12 @@ impl ArchipelagoMod {
 		     Connected room seed: {}\n\
 		     \n\
 		     Continue connecting and overwrite the save file seed?",
-                    save_data.seed,
+                    save_data.seed.as_ref().unwrap(),
                     client.room_info().seed_name,
                 ));
 
                 if ui.button("Overwrite") {
-                    save_data.seed = client.room_info().seed_name.clone();
+                    save_data.seed = Some(client.room_info().seed_name.clone());
                     return;
                 }
 
