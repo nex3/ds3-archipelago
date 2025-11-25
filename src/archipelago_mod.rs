@@ -274,7 +274,7 @@ impl ArchipelagoMod {
     }
 
     /// The player's slot ID, if it's known.
-    fn slot(&self) -> Option<i32> {
+    fn slot(&self) -> Option<i64> {
         Some(self.client()?.connected().slot)
     }
 
