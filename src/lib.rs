@@ -18,6 +18,7 @@ mod archipelago_mod;
 mod client;
 mod clipboard_backend;
 mod config;
+mod item;
 mod paths;
 mod save_data;
 mod slot_data;
@@ -41,10 +42,13 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
     info!("Logger initialized.");
 
     // Set up hooks in the main thread to mitigate the risk of the game code
-    // isn't executing them while they're being modified.
+    // executing them while they're being modified.
 
     // Safety: We only hook these functions here specifically.
-    unsafe { SaveData::hook() };
+    unsafe {
+        SaveData::hook();
+        item::hook_items();
+    }
 
     let blocker =
         unsafe { InputBlocker::get_instance() }.expect("Failed to initialize input blocker");

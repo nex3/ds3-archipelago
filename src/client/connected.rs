@@ -72,10 +72,19 @@ impl ConnectedClient {
     }
 
     /// Sends a message to the server and other clients.
-    pub fn say(&mut self, text: impl AsRef<str>) {
+    pub fn say(&self, text: impl AsRef<str>) {
         self.tx
             .blocking_send(ClientMessage::Say(Say {
                 text: text.as_ref().to_string(),
+            }))
+            .unwrap();
+    }
+
+    /// Notifies the server that the given [locations] have been accessed.
+    pub fn location_checks(&self, locations: impl IntoIterator<Item = i64>) {
+        self.tx
+            .blocking_send(ClientMessage::LocationChecks(LocationChecks {
+                locations: locations.into_iter().collect(),
             }))
             .unwrap();
     }

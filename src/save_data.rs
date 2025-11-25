@@ -12,7 +12,8 @@ use log::*;
 /// from the save file or set explicitly.
 static INSTANCE: LazyLock<RwLock<SaveData>> = LazyLock::new(|| {
     RwLock::new(SaveData {
-        items_granted: HashSet::new(),
+        items_granted: Default::default(),
+        locations: Default::default(),
         seed: None,
     })
 });
@@ -26,6 +27,10 @@ pub struct SaveData {
     /// The set of all Archipelago item IDs that have been granted to this
     /// player from foreign games throughout the course of this run.
     pub items_granted: HashSet<i64>,
+
+    /// The set of Archipelago locations that this player has accessed so far in
+    /// this game.
+    pub locations: HashSet<i64>,
 
     /// The Archipelago seed this save file was last connected to. This is used
     /// to verify that the player doesn't accidentally corrupt a save by loading

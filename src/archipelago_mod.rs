@@ -1,6 +1,9 @@
+use std::any::Any;
 use std::time::Instant;
 
 use archipelago_rs::protocol::{ItemsHandlingFlags, JSONColor, JSONMessagePart, PrintJSON};
+use darksouls3::cs::*;
+use darksouls3::param::EQUIP_PARAM_GOODS_ST;
 use darksouls3::sprj::*;
 use darksouls3::util::input::*;
 use fromsoftware_shared::{FromStatic, InstanceResult};
@@ -11,6 +14,7 @@ use log::*;
 use crate::client::{ClientConnectionState::*, *};
 use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::config::Config;
+use crate::item::{CategorizedItemIDExt, EquipParamExt};
 use crate::save_data::*;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
@@ -47,6 +51,11 @@ pub struct ArchipelagoMod {
     /// before we start doing stuff in game. None if the game is not currently
     /// loaded.
     load_time: Option<Instant>,
+
+    /// The number of locations sent to the server in this session. This always
+    /// starts at 0 when the player boots the game again to ensure that they
+    /// resend any locations that may have been missed.
+    locations_sent: usize,
 
     /// The struct that's used to block and unblock input going to DS3.
     input_blocker: &'static InputBlocker,
@@ -95,6 +104,7 @@ impl ArchipelagoMod {
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,
+            locations_sent: 0,
             input_blocker,
             viewport_size: None,
             popup_url: String::new(),
@@ -189,7 +199,8 @@ impl ArchipelagoMod {
             }
         }
 
-        self.process_items(item_man);
+        self.process_incoming_items(item_man);
+        self.process_inventory_items();
     }
 
     /// Handle new prints that come from the Archipelago server.
@@ -213,7 +224,7 @@ impl ArchipelagoMod {
 
     /// Handle new items, distributing them to the player when appropriate. This
     /// also initializes the [SaveData] for a new file.
-    fn process_items(&mut self, item_man: InstanceResult<&mut MapItemMan>) {
+    fn process_incoming_items(&mut self, item_man: InstanceResult<&mut MapItemMan>) {
         let Some(connection) = self.connection.as_mut() else {
             return;
         };
@@ -247,6 +258,56 @@ impl ArchipelagoMod {
                 durability: -1,
             });
             self.last_item_time = Instant::now();
+        }
+    }
+
+    /// Removes any placeholder items from the player's inventory and notifies
+    /// the server that they've been accessed.
+    fn process_inventory_items(&mut self) {
+        let Some(ref mut save_data) = SaveData::instance_mut() else {
+            return;
+        };
+        let Ok(game_data_man) = (unsafe { GameDataMan::instance() }) else {
+            return;
+        };
+        let Ok(regulation_manager) = (unsafe { CSRegulationManager::instance() }) else {
+            return;
+        };
+
+        let archipelago_item_ids = game_data_man
+            .main_player_game_data
+            .equipment
+            .equip_inventory_data
+            .items_data
+            .items()
+            .map(|entry| entry.item_id)
+            .filter(|id| id.is_archipelago())
+            .collect::<Vec<_>>();
+
+        if archipelago_item_ids.len() != 0 {
+            for id in archipelago_item_ids {
+                let row = regulation_manager
+                    .get_equip_param(id)
+                    .expect("no row defined for Archipelago ID");
+
+                save_data.locations.insert(row.archipelago_location_id());
+                if let Some(good) = (&row as &dyn Any).downcast_ref::<EQUIP_PARAM_GOODS_ST>()
+                    && good.icon_id() == 7039
+                {
+                    todo!();
+                } else if let Some((real_id, quantity)) = row.archipelago_item() {
+                    game_data_man.add_or_remove_item(real_id, quantity.try_into().unwrap());
+                }
+                game_data_man.add_or_remove_item(id, -1);
+            }
+        }
+
+        if let Some(connection) = self.connection.as_mut()
+            && let Connected(client) = connection.state_mut()
+            && save_data.locations.len() > self.locations_sent
+        {
+            client.location_checks(save_data.locations.iter().copied());
+            self.locations_sent = save_data.locations.len();
         }
     }
 

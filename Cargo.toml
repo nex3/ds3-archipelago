@@ -15,6 +15,7 @@ clipboard-win = "5.4.1"
 darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }
 fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
 hudhook = "0.8.1"
+ilhook = {version = "2.3.0", features = ["x64"]}
 imgui = { version = "0.12", features = ["docking", "tables-api"] }
 json = { package = "serde_json", version = "1.0.145" }
 log = "0.4.28"

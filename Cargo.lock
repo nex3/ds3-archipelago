@@ -306,6 +306,7 @@ dependencies = [
  "darksouls3",
  "fromsoftware-shared",
  "hudhook",
+ "ilhook",
  "imgui",
  "log",
  "pelite",
