@@ -471,6 +471,50 @@ impl ArchipelagoMod {
     }
 
     /// Renders the popup window alerting the user that their connected seed
+    /// doesn't match their saved seed. Returns whether the popup was rendered.
+    fn render_version_conflict_popup(&mut self, ui: &Ui) -> bool {
+        let Some(version) = self.config.version() else {
+            return false;
+        };
+        if version == env!("CARGO_PKG_VERSION") {
+            return false;
+        }
+
+        ui.open_popup("#version-conflict");
+        ui.modal_popup_config("#version-conflict")
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .build(|| {
+                // Without a wrapper window, the size of the popup ends up
+                // narrow and tall. There seems to be no way to control this
+                // directly with the Rust UI.
+                let Some(_tok) = ui
+                    .child_window("#version-conflict-window")
+                    .size([600., 130.])
+                    .begin()
+                else {
+                    return;
+                };
+                ui.set_window_font_scale(1.8);
+
+                ui.text_wrapped(format!(
+                    "This save was generated using static randomizer v{}, but \
+                     this client is v{}. Re-run the static randomizer with the \
+                     current version.",
+                    version,
+                    env!("CARGO_PKG_VERSION"),
+                ));
+
+                ui.separator();
+                if ui.button("Exit") {
+                    std::process::exit(1);
+                }
+            });
+        true
+    }
+
+    /// Renders the popup window alerting the user that their connected seed
     /// doesn't match their saved seed.
     fn render_seed_conflict_popup(&mut self, ui: &Ui) {
         let Some(connection) = self.connection.as_ref() else {
@@ -517,6 +561,7 @@ impl ArchipelagoMod {
                     client.room_info().seed_name,
                 ));
 
+                ui.separator();
                 if ui.button("Overwrite") {
                     save_data.seed = Some(client.room_info().seed_name.clone());
                     return;
@@ -573,7 +618,9 @@ impl ImguiRenderLoop for ArchipelagoMod {
                 self.render_log_window(ui);
                 self.render_connection_popup(ui);
                 self.render_say_input(ui);
-                self.render_seed_conflict_popup(ui);
+                if !self.render_version_conflict_popup(ui) {
+                    self.render_seed_conflict_popup(ui);
+                }
             });
     }
 
