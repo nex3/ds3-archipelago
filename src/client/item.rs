@@ -6,7 +6,7 @@ use darksouls3::sprj::CategorizedItemID;
 /// All information about a Dark Souls III item provided by Archipelago.
 pub struct Item {
     ap: NetworkItem,
-    name: Arc<String>,
+    ap_name: Arc<String>,
     location_name: Option<Arc<String>>,
     ds3_id: CategorizedItemID,
     quantity: u32,
@@ -15,14 +15,14 @@ pub struct Item {
 impl Item {
     pub(super) fn new(
         ap: NetworkItem,
-        name: Arc<String>,
+        ap_name: Arc<String>,
         location_name: Option<Arc<String>>,
         ds3_id: CategorizedItemID,
         quantity: u32,
     ) -> Self {
         Item {
             ap,
-            name,
+            ap_name,
             location_name,
             ds3_id,
             quantity,
@@ -46,32 +46,38 @@ impl Item {
     }
 
     /// Returns the Archipelago location ID for this item.
+    #[allow(dead_code)]
     pub fn ap_location_id(&self) -> i64 {
         self.ap.location
     }
 
     /// Returns whether this item can unlock logical advancement.
+    #[allow(dead_code)]
     pub fn is_progression(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::PROGRESSION)
     }
 
     /// Returns whether this item is especially useful.
+    #[allow(dead_code)]
     pub fn is_useful(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::USEFUL)
     }
 
     /// Returns whether this item is a trap.
+    #[allow(dead_code)]
     pub fn is_trap(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::TRAP)
     }
 
     /// Returns Archipelago's name for this item.
+    #[allow(dead_code)]
     pub fn ap_name(&self) -> &str {
-        self.name.as_ref()
+        self.ap_name.as_ref()
     }
 
     /// Returns Archipelago's name for this item's location, or None if the item
     /// has no location (such as a starting inventory item).
+    #[allow(dead_code)]
     pub fn location_name(&self) -> Option<&str> {
         if let Some(name) = &self.location_name {
             Some(name.as_ref())

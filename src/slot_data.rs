@@ -16,13 +16,6 @@ pub struct SlotData {
     /// item the given ID should grant.
     pub item_counts: HashMap<I64Key, u32>,
 
-    /// The seed used to generate this multiworld. Together with the slot we
-    /// consider this to uniquely identify a given save file.
-    pub seed: String,
-
-    /// The slot name for this player.
-    pub slot: String,
-
     /// The options chosen by this player.
     pub options: Options,
 }
