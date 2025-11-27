@@ -4,8 +4,8 @@ use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
 
-use crate::archipelago_mod::{ArchipelagoMod, SimpleConnectionState};
 use crate::clipboard_backend::WindowsClipboardBackend;
+use crate::core::{Core, SimpleConnectionState};
 use crate::save_data::*;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
@@ -26,7 +26,7 @@ const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 pub struct Overlay {
     /// The struct that manages the core mod logic that's not strictly
     /// UI-related.
-    core: ArchipelagoMod,
+    core: Core,
 
     /// The struct that's used to block and unblock input going to DS3.
     input_blocker: &'static InputBlocker,
@@ -59,7 +59,7 @@ pub struct Overlay {
     frames_since_new_logs: u64,
 }
 
-// Safety: The sole ArchipelagoMod instance is owned by Hudhook, which only ever
+// Safety: The sole Overlay instance is owned by Hudhook, which only ever
 // interacts with it during frame rendering. We know DS3 frame rendering always
 // happens on the main thread, and never in parallel, so synchronization is not
 // a real concern.
@@ -67,9 +67,9 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new(input_blocker: &'static InputBlocker) -> Overlay {
-        Overlay {
-            core: ArchipelagoMod::new(),
+    pub fn new(input_blocker: &'static InputBlocker) -> Self {
+        Self {
+            core: Core::new(),
             input_blocker,
             viewport_size: None,
             popup_url: String::new(),

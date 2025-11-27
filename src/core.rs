@@ -13,8 +13,9 @@ use crate::config::Config;
 use crate::item::{CategorizedItemIDExt, EquipParamExt};
 use crate::save_data::*;
 
-/// The fully-initialized Archipelago mod at the whole-game level.
-pub struct ArchipelagoMod {
+/// The core of the Archipelago mod. This is responsible for running the
+/// non-UI-related game logic and interacting with the Archieplago client.
+pub struct Core {
     /// The configuration for the current Archipelago connection. This is not
     /// guaranteed to be complete *or* accurate; it's the mod's responsibility
     /// to ensure it makes sense before actually interacting with an individual
@@ -43,15 +44,15 @@ pub struct ArchipelagoMod {
     locations_sent: usize,
 }
 
-impl ArchipelagoMod {
+impl Core {
     /// Creates a new instance of the mod.
-    pub fn new() -> ArchipelagoMod {
+    pub fn new() -> Self {
         let config = match Config::load_or_default() {
             Ok(config) => config,
             Err(e) => panic!("Failed to load config: {e:?}"),
         };
 
-        let mut ap_mod = ArchipelagoMod {
+        let mut ap_mod = Self {
             config,
             connection: None,
             log_buffer: vec![],
