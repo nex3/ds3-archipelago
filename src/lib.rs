@@ -19,10 +19,12 @@ mod client;
 mod clipboard_backend;
 mod config;
 mod item;
+mod overlay;
 mod paths;
 mod save_data;
 mod slot_data;
 
+use overlay::Overlay;
 use save_data::SaveData;
 
 /// The entrypoint called when the DLL is first loaded.
@@ -61,7 +63,7 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
         info!("Game system initialized.");
 
         if let Err(e) = Hudhook::builder()
-            .with::<ImguiDx11Hooks>(archipelago_mod::ArchipelagoMod::new(blocker))
+            .with::<ImguiDx11Hooks>(Overlay::new(blocker))
             .with_hmodule(hmodule)
             .build()
             .apply()
