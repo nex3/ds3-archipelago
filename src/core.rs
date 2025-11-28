@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use archipelago_rs::protocol::{ItemsHandlingFlags, PrintJSON};
 use darksouls3::cs::*;
@@ -43,6 +43,10 @@ pub struct Core {
     /// resend any locations that may have been missed.
     locations_sent: usize,
 }
+
+/// The grace period between MapItemMan starting to exist and the mod beginning
+/// to take actions.
+const GRACE_PERIOD: Duration = Duration::from_secs(10);
 
 impl Core {
     /// Creates a new instance of the mod.
@@ -167,6 +171,12 @@ impl Core {
                 // connected seeds, don't make any changes until it's resolved.
                 return;
             }
+        }
+
+        if let Some(time) = self.load_time
+            && Instant::now().duration_since(time) < GRACE_PERIOD
+        {
+            return;
         }
 
         self.process_incoming_items(item_man);
