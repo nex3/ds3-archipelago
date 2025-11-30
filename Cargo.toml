@@ -9,6 +9,7 @@ name = "archipelago"
 
 [dependencies]
 archipelago_rs = { path = "../archipelago_rs" }
+backtrace = "0.3.76"
 bincode = "2.0.1"
 chrono = "0.4.42"
 clipboard-win = "5.4.1"

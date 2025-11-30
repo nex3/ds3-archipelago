@@ -1,4 +1,4 @@
-use archipelago_rs::protocol::{JSONColor, JSONMessagePart, PrintJSON};
+use archipelago_rs::protocol::{RichMessageColor, RichMessagePart, RichPrint};
 use darksouls3::util::input::*;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
@@ -164,10 +164,10 @@ impl Overlay {
                 }
 
                 for message in logs {
-                    use PrintJSON::*;
+                    use RichPrint::*;
                     write_message_data(
                         ui,
-                        &message.data(),
+                        message.data(),
                         // De-emphasize miscellaneous server prints.
                         match message {
                             Chat { .. }
@@ -243,6 +243,8 @@ impl Overlay {
     /// Renders the popup window alerting the user that their Archipelago config
     /// expects DLC to be installed. Returns whether the popup was rendered.
     fn render_dlc_error_popup(&mut self, ui: &Ui) -> bool {
+        return false;
+
         let Some(client) = self.core.client() else {
             return false;
         };
@@ -256,11 +258,21 @@ impl Overlay {
             return false;
         }
 
+        let dlcs = if dlc.dlc1_installed {
+            "the Ringed City DLC"
+        } else if dlc.dlc2_installed {
+            "the Ashes of Ariandel DLC"
+        } else {
+            "both DLCs"
+        };
+
         fatal_error(
             ui,
-            80.,
-            "DLC is enabled for this seed but your game is missing one or both \
-             DLCs.",
+            90.,
+            format!(
+                "DLC is enabled for this seed but your game is missing {}.",
+                dlcs
+            ),
         );
         true
     }
@@ -411,7 +423,7 @@ fn copy_from_or_clear(target: &mut String, source: Option<&String>) {
 }
 
 /// Writes the text in [parts] to [ui] in a single line.
-fn write_message_data(ui: &Ui, parts: &Vec<JSONMessagePart>, alpha: u8) {
+fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
     let mut first = true;
     for part in parts {
         if !first {
@@ -422,8 +434,8 @@ fn write_message_data(ui: &Ui, parts: &Vec<JSONMessagePart>, alpha: u8) {
         // TODO: Load in fonts to support bold, maybe write a line manually for
         // underline? I'm not sure there's a reasonable way to support
         // background colors.
-        use JSONColor::*;
-        use JSONMessagePart::*;
+        use RichMessageColor::*;
+        use RichMessagePart::*;
         let color = match part {
             PlayerId { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
             ItemId { .. } | ItemName { .. } | Color { color: Magenta, .. } => MAGENTA,
@@ -437,7 +449,7 @@ fn write_message_data(ui: &Ui, parts: &Vec<JSONMessagePart>, alpha: u8) {
             Color { color: Yellow, .. } => YELLOW,
             _ => WHITE,
         };
-        ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), &part.text());
+        ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), &part.to_string());
     }
 }
 

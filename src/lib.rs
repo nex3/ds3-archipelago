@@ -3,16 +3,17 @@ use std::panic;
 use std::path::Path;
 use std::time::Duration;
 
+use backtrace::Backtrace;
 use chrono::prelude::*;
 use darksouls3::util::{input::InputBlocker, system::wait_for_system_init};
 use fromsoftware_shared::program::Program;
-use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
+use hudhook::{hooks::dx11::ImguiDx11Hooks, Hudhook};
 use log::*;
 use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
+use windows::core::*;
 use windows::Win32::{
     Foundation::*, System::SystemServices::*, UI::WindowsAndMessaging::MessageBoxW,
 };
-use windows::core::*;
 
 mod client;
 mod clipboard_backend;
@@ -88,9 +89,7 @@ fn handle_panics() {
             message.push_str(&format!("Rust panic: {:?}", panic_info.payload()));
         }
 
-        if let Some(l) = panic_info.location() {
-            message.push_str(&format!("\n{l}"));
-        }
+        message.push_str(&format!("\n{:?}", Backtrace::new()));
 
         error!("{}", message);
         message_box(message);

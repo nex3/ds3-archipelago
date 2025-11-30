@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::time::{Duration, Instant};
 
-use archipelago_rs::protocol::{ItemsHandlingFlags, PrintJSON};
+use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
 use darksouls3::cs::*;
 use darksouls3::param::EQUIP_PARAM_GOODS_ST;
 use darksouls3::sprj::*;
@@ -23,7 +23,7 @@ pub struct Core {
     config: Config,
 
     /// The log of prints displayed in the overlay.
-    log_buffer: Vec<PrintJSON>,
+    log_buffer: Vec<RichPrint>,
 
     /// The Archipelago client connection, if it's connected.
     connection: Option<ClientConnection>,
@@ -42,11 +42,19 @@ pub struct Core {
     /// starts at 0 when the player boots the game again to ensure that they
     /// resend any locations that may have been missed.
     locations_sent: usize,
+
+    /// The last time the player either sent or received a death link (or
+    /// started a session).
+    last_death_link: Instant,
 }
 
 /// The grace period between MapItemMan starting to exist and the mod beginning
 /// to take actions.
 const GRACE_PERIOD: Duration = Duration::from_secs(10);
+
+/// The grace period after either sending or receiving a death link during which
+/// no further death links will be sent or received.
+const DEATH_LINK_GRACE_PERIOD: Duration = Duration::from_secs(1); //30);
 
 impl Core {
     /// Creates a new instance of the mod.
@@ -63,6 +71,7 @@ impl Core {
             last_item_time: Instant::now(),
             load_time: None,
             locations_sent: 0,
+            last_death_link: Instant::now(),
         };
 
         if ap_mod.config.url().is_some() && ap_mod.config.slot().is_some() {
@@ -117,7 +126,7 @@ impl Core {
 
     /// Returns the list of all logs that have been emitted in the current
     /// session.
-    pub fn logs(&self) -> &[PrintJSON] {
+    pub fn logs(&self) -> &[RichPrint] {
         self.log_buffer.as_slice()
     }
 
@@ -174,13 +183,14 @@ impl Core {
         }
 
         if let Some(time) = self.load_time
-            && Instant::now().duration_since(time) < GRACE_PERIOD
+            && time.elapsed() < GRACE_PERIOD
         {
             return;
         }
 
         self.process_incoming_items(item_man);
         self.process_inventory_items();
+        self.handle_death_link();
     }
 
     /// Handle new prints that come from the Archipelago server.
@@ -229,6 +239,17 @@ impl Core {
             .iter()
             .find(|item| save_data.items_granted.insert(item.ap_id()))
         {
+            info!(
+                "Granting {} (AP ID {}, DS3 ID {:?}{})",
+                item.ap_name(),
+                item.ap_id(),
+                item.ds3_id(),
+                if let Some(location) = item.location_name() {
+                    format!("from {}", location)
+                } else {
+                    "".to_string()
+                });
+
             item_man.grant_item(ItemBufferEntry {
                 id: item.ds3_id(),
                 quantity: item.quantity(),
@@ -288,6 +309,34 @@ impl Core {
         }
     }
 
+    /// Kills the player after a death link is received and sends a death link
+    /// when the player dies.
+    pub fn handle_death_link(&mut self) {
+        if self.last_death_link.elapsed() < DEATH_LINK_GRACE_PERIOD {
+            return;
+        }
+        let Some(connection) = self.connection.as_mut() else {
+            return;
+        };
+        let Connected(client) = connection.state_mut() else {
+            return;
+        };
+        let Ok(player) = (unsafe { PlayerIns::instance() }) else {
+            return;
+        };
+        if !client.connected().slot_data.options.death_link {
+            return;
+        }
+
+        if client.death_link().is_some() {
+            player.kill();
+            self.last_death_link = Instant::now();
+        } else if player.super_chr_ins.modules.data.hp == 0 {
+            client.send_death_link();
+            self.last_death_link = Instant::now();
+        }
+    }
+
     /// The player's slot ID, if it's known.
     pub fn slot(&self) -> Option<i64> {
         Some(self.client()?.connected().slot)
@@ -302,7 +351,7 @@ impl Core {
             self.config.slot().unwrap(),
             self.config.password(),
             ItemsHandlingFlags::OTHER_WORLDS & ItemsHandlingFlags::STARTING_INVENTORY,
-            vec![],
+            vec!["DeathLink".to_string()],
         ));
     }
 
@@ -314,7 +363,7 @@ impl Core {
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
         self.log_buffer
-            .push(PrintJSON::message(message_ref.to_string()));
+            .push(RichPrint::message(message_ref.to_string()));
     }
 }
 

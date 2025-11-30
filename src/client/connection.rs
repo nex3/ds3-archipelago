@@ -4,12 +4,10 @@ use std::thread;
 use archipelago_rs::client::*;
 use archipelago_rs::protocol::*;
 use log::*;
-use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
+use tokio::sync::mpsc::{channel, error::TryRecvError, Receiver, Sender};
 
-use crate::client::{ConnectedClient, GameDataWrapper};
+use crate::client::ConnectedClient;
 use crate::slot_data::SlotData;
-
-const GAME_NAME: &str = "Dark Souls III";
 
 /// A class that manages the Archipelago client connection in a pull-based
 /// manner. All of the actual communication is done on a separate thread. The
@@ -26,10 +24,10 @@ pub struct ClientConnection {
     /// ownership is passed to [ConnectedClient].
     room_info: Option<RoomInfo>,
 
-    /// The game data for Dark Souls III. This is only set during a subset of
+    /// The Archipelago data package. This is only set during a subset of
     /// [ClientConnectionState::Connecting], after which point ownership is
     /// passed to [ConnectedClient].
-    game_data: Option<GameDataWrapper>,
+    data_package: Option<DataPackageObject>,
 
     /// The transmitter for messages going to the worker thread.
     ///
@@ -120,7 +118,7 @@ impl ClientConnection {
             state: ClientConnectionState::Connecting,
             rx: outer_rx,
             room_info: None,
-            game_data: None,
+            data_package: None,
             tx: Some(outer_tx),
             _handle: handle,
         }
@@ -170,19 +168,13 @@ impl ClientConnection {
                     return;
                 }
                 Ok(Ok(ServerMessage::RoomInfo(room_info))) => self.room_info = Some(room_info),
-                Ok(Ok(ServerMessage::DataPackage(mut data_package))) => {
-                    self.game_data = Some(GameDataWrapper::new(
-                        data_package
-                            .data
-                            .games
-                            .remove(GAME_NAME)
-                            .expect("Expected game data for Dark Souls III"),
-                    ));
+                Ok(Ok(ServerMessage::DataPackage(DataPackage { data }))) => {
+                    self.data_package = Some(data);
                 }
                 Ok(Ok(ServerMessage::Connected(connected))) => {
                     let tx = self.tx.take().unwrap();
                     let game_data = self
-                        .game_data
+                        .data_package
                         .take()
                         .expect("Expected game data to be received before Connected");
                     let room_info = self
@@ -232,7 +224,7 @@ async fn run_worker(
 
     client
         .send(ClientMessage::GetDataPackage(GetDataPackage {
-            games: Some(vec![GAME_NAME.to_string()]),
+            games: None,
         }))
         .await?;
     let response = client.recv().await?;
