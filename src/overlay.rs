@@ -4,7 +4,7 @@ use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
 
-use darksouls3::cs::CSDlc;
+use darksouls3::{cs::CSDlc, sprj::GameDataMan};
 use fromsoftware_shared::FromStatic;
 
 use crate::clipboard_backend::WindowsClipboardBackend;
@@ -243,20 +243,26 @@ impl Overlay {
     /// Renders the popup window alerting the user that their Archipelago config
     /// expects DLC to be installed. Returns whether the popup was rendered.
     fn render_dlc_error_popup(&mut self, ui: &Ui) -> bool {
-        return false;
-
         let Some(client) = self.core.client() else {
             return false;
         };
         let Ok(dlc) = (unsafe { CSDlc::instance() }) else {
             return false;
         };
-        if client.connected().slot_data.options.enable_dlc
-            && !dlc.dlc1_installed
-            && !dlc.dlc2_installed
+        if !client.connected().slot_data.options.enable_dlc
+            || (dlc.dlc1_installed && dlc.dlc2_installed)
         {
             return false;
         }
+
+        // The DLC always registers as not installed until the player clicks
+        // through the initial opening screen and loads their global save data.
+        // Ideally we should find a better way of detecting when that happens,
+        // but for now we just wait to indicate an error until they're actually
+        // in a game.
+        if (unsafe { GameDataMan::instance() }).is_err() {
+            return false;
+        };
 
         let dlcs = if dlc.dlc1_installed {
             "the Ringed City DLC"
