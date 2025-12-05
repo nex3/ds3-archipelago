@@ -7,13 +7,13 @@ use backtrace::Backtrace;
 use chrono::prelude::*;
 use darksouls3::util::{input::InputBlocker, system::wait_for_system_init};
 use fromsoftware_shared::program::Program;
-use hudhook::{hooks::dx11::ImguiDx11Hooks, Hudhook};
+use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
 use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
-use windows::core::*;
 use windows::Win32::{
     Foundation::*, System::SystemServices::*, UI::WindowsAndMessaging::MessageBoxW,
 };
+use windows::core::*;
 
 mod client;
 mod clipboard_backend;

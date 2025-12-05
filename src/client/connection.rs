@@ -4,7 +4,7 @@ use std::thread;
 use archipelago_rs::client::*;
 use archipelago_rs::protocol::*;
 use log::*;
-use tokio::sync::mpsc::{channel, error::TryRecvError, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel, error::TryRecvError};
 
 use crate::client::ConnectedClient;
 use crate::slot_data::SlotData;

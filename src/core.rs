@@ -46,6 +46,12 @@ pub struct Core {
     /// The last time the player either sent or received a death link (or
     /// started a session).
     last_death_link: Instant,
+
+    /// Whether the player has achieved their goal and sent that information to
+    /// the Archipelago server. This is stored here rather than in the save data
+    /// so that it's resent every time the player starts the game, just in case
+    /// it got lost in transit.
+    sent_goal: bool,
 }
 
 /// The grace period between MapItemMan starting to exist and the mod beginning
@@ -72,6 +78,7 @@ impl Core {
             load_time: None,
             locations_sent: 0,
             last_death_link: Instant::now(),
+            sent_goal: false,
         };
 
         if ap_mod.config.url().is_some() && ap_mod.config.slot().is_some() {
@@ -191,6 +198,7 @@ impl Core {
         self.process_incoming_items(item_man);
         self.process_inventory_items();
         self.handle_death_link();
+        self.handle_goal();
     }
 
     /// Handle new prints that come from the Archipelago server.
@@ -248,7 +256,8 @@ impl Core {
                     format!("from {}", location)
                 } else {
                     "".to_string()
-                });
+                }
+            );
 
             item_man.grant_item(ItemBufferEntry {
                 id: item.ds3_id(),
@@ -334,6 +343,18 @@ impl Core {
         } else if player.super_chr_ins.modules.data.hp == 0 {
             client.send_death_link();
             self.last_death_link = Instant::now();
+        }
+    }
+
+    /// Detects when the player has won the game and notifies the server.
+    pub fn handle_goal(&mut self) {
+        if let Ok(event_man) = (unsafe { SprjEventFlagMan::instance() })
+            && let Some(client) = self.client()
+            && !self.sent_goal
+            && event_man.get_flag(14100800.try_into().unwrap())
+        {
+            client.send_goal();
+            self.sent_goal = true;
         }
     }
 

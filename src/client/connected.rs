@@ -108,6 +108,8 @@ impl ConnectedClient {
             .unwrap();
     }
 
+    /// Notifies the server that this player has died and it should send a death
+    /// link to other players.
     pub fn send_death_link(&self) {
         self.tx
             .blocking_send(ClientMessage::Bounce(Bounce {
@@ -119,6 +121,15 @@ impl ConnectedClient {
                     cause: None,
                     source: self.room_info.seed_name.clone(),
                 }),
+            }))
+            .unwrap();
+    }
+
+    /// Notifies the server that this player has acheived their goal.
+    pub fn send_goal(&self) {
+        self.tx
+            .blocking_send(ClientMessage::StatusUpdate(StatusUpdate {
+                status: ClientStatus::ClientGoal,
             }))
             .unwrap();
     }
@@ -165,7 +176,7 @@ impl ConnectedClient {
             ServerMessage::RichPrint(mut message) => {
                 message.add_names(&self.connected, &self.data_package);
                 self.prints.push(message);
-            },
+            }
             ServerMessage::Bounced(Bounced {
                 data: BounceData::DeathLink(death_link),
                 ..
