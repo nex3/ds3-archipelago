@@ -75,7 +75,6 @@ impl CategorizedItemIDExt for CategorizedItemID {
             Weapon => id > 23010000,
             Protector => id > 99003000,
             Accessory | Goods => id > 3780000,
-            _ => false,
         }
     }
 }

@@ -229,6 +229,9 @@ impl Core {
         let Ok(item_man) = item_man else {
             return;
         };
+        let Ok(player_game_data) = (unsafe { PlayerGameData::instance() }) else {
+            return;
+        };
         let mut save_data = SaveData::instance_mut();
         let Some(save_data) = save_data.as_mut() else {
             return;
@@ -242,6 +245,9 @@ impl Core {
             return;
         }
 
+        // TODO: this prevents Archipelago from sending multiple copies of the
+        // same item. Find a better way to avoid the duplicate-everything
+        // problem.
         if let Some(item) = client
             .items()
             .iter()
@@ -259,11 +265,19 @@ impl Core {
                 }
             );
 
-            item_man.grant_item(ItemBufferEntry {
-                id: item.ds3_id(),
-                quantity: item.quantity(),
-                durability: -1,
-            });
+            // Grant Path of the Dragon as a gesture rather than an item.
+            if item.ds3_id().category() == ItemCategory::Goods
+                && item.ds3_id().uncategorized().value() == 9030
+            {
+                player_game_data.grant_gesture(29, item.ds3_id());
+            } else {
+                item_man.grant_item(ItemBufferEntry {
+                    id: item.ds3_id(),
+                    quantity: item.quantity(),
+                    durability: -1,
+                });
+            }
+
             self.last_item_time = Instant::now();
         }
     }
@@ -298,10 +312,18 @@ impl Core {
                     .expect("no row defined for Archipelago ID");
 
                 save_data.locations.insert(row.archipelago_location_id());
+
                 if let Some(good) = (&row as &dyn Any).downcast_ref::<EQUIP_PARAM_GOODS_ST>()
                     && good.icon_id() == 7039
                 {
-                    todo!();
+                    // If the player gets the synthetic Path of the Dragon item,
+                    // give them the gesture itself instead. Don't display an
+                    // item pop-up, because they already saw one when they got
+                    // the item.
+                    game_data_man
+                        .main_player_game_data
+                        .gesture_data
+                        .set_gesture_acquired(29, true);
                 } else if let Some((real_id, quantity)) = row.archipelago_item() {
                     game_data_man.add_or_remove_item(real_id, quantity.try_into().unwrap());
                 }
