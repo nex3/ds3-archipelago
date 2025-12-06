@@ -10,6 +10,7 @@ pub struct Item {
     location_name: Option<Arc<String>>,
     ds3_id: CategorizedItemID,
     quantity: u32,
+    index: u64,
 }
 
 impl Item {
@@ -19,6 +20,7 @@ impl Item {
         location_name: Option<Arc<String>>,
         ds3_id: CategorizedItemID,
         quantity: u32,
+        index: u64,
     ) -> Self {
         Item {
             ap,
@@ -26,57 +28,57 @@ impl Item {
             location_name,
             ds3_id,
             quantity,
+            index,
         }
     }
 
-    /// Returns the Archipelago ID for this item.
+    /// The Archipelago ID for this item.
     pub fn ap_id(&self) -> i64 {
         self.ap.item
     }
 
-    /// Returns the DS3 ID for this item.
+    /// The DS3 ID for this item.
     pub fn ds3_id(&self) -> CategorizedItemID {
         self.ds3_id
     }
 
-    /// Returns the number of instances of this item that should be granted to
-    /// the user.
+    /// The number of instances of this item that should be granted to the user.
     pub fn quantity(&self) -> u32 {
         self.quantity
     }
 
-    /// Returns the Archipelago location ID for this item.
+    /// The Archipelago location ID for this item.
     #[allow(dead_code)]
     pub fn ap_location_id(&self) -> i64 {
         self.ap.location
     }
 
-    /// Returns whether this item can unlock logical advancement.
+    /// Whether this item can unlock logical advancement.
     #[allow(dead_code)]
     pub fn is_progression(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::PROGRESSION)
     }
 
-    /// Returns whether this item is especially useful.
+    /// Whether this item is especially useful.
     #[allow(dead_code)]
     pub fn is_useful(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::USEFUL)
     }
 
-    /// Returns whether this item is a trap.
+    /// Whether this item is a trap.
     #[allow(dead_code)]
     pub fn is_trap(&self) -> bool {
         self.ap.flags.contains(NetworkItemFlags::TRAP)
     }
 
-    /// Returns Archipelago's name for this item.
+    /// Archipelago's name for this item.
     #[allow(dead_code)]
     pub fn ap_name(&self) -> &str {
         self.ap_name.as_ref()
     }
 
-    /// Returns Archipelago's name for this item's location, or None if the item
-    /// has no location (such as a starting inventory item).
+    /// Archipelago's name for this item's location, or None if the item has no
+    /// location (such as a starting inventory item).
     #[allow(dead_code)]
     pub fn location_name(&self) -> Option<&str> {
         if let Some(name) = &self.location_name {
@@ -84,5 +86,11 @@ impl Item {
         } else {
             None
         }
+    }
+
+    /// The absolute index of this item among all items received from the game
+    /// at any point.
+    pub fn index(&self) -> u64 {
+        self.index
     }
 }

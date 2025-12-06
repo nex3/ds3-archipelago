@@ -245,13 +245,10 @@ impl Core {
             return;
         }
 
-        // TODO: this prevents Archipelago from sending multiple copies of the
-        // same item. Find a better way to avoid the duplicate-everything
-        // problem.
         if let Some(item) = client
             .items()
             .iter()
-            .find(|item| save_data.items_granted.insert(item.ap_id()))
+            .find(|item| item.index() >= save_data.items_granted)
         {
             info!(
                 "Granting {} (AP ID {}, DS3 ID {:?}{})",
@@ -278,6 +275,7 @@ impl Core {
                 });
             }
 
+            save_data.items_granted += 1;
             self.last_item_time = Instant::now();
         }
     }

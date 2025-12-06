@@ -23,9 +23,9 @@ const CONFIG: bincode::config::Configuration = bincode::config::standard();
 /// Data that's saved and loaded along with the player's game save.
 #[derive(Debug, Decode, Encode)]
 pub struct SaveData {
-    /// The set of all Archipelago item IDs that have been granted to this
-    /// player from foreign games throughout the course of this run.
-    pub items_granted: HashSet<i64>,
+    /// The number of Archipelago items that have been granted to this player
+    /// from foreign games throughout the course of this run.
+    pub items_granted: u64,
 
     /// The set of Archipelago locations that this player has accessed so far in
     /// this game.

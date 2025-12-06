@@ -139,38 +139,46 @@ impl ConnectedClient {
     pub(super) fn update(&mut self, message: ServerMessage<SlotData>) {
         match message {
             ServerMessage::ReceivedItems(message) => {
-                self.items.extend(message.items.into_iter().map(|ap| {
-                    let name = self
-                        .data_package
-                        .games
-                        .get(GAME_NAME)
-                        .unwrap_or_else(|| panic!("Expected game data for {}", GAME_NAME))
-                        .item_id_to_name()
-                        .get(&ap.item)
-                        .expect("Expected item ID to have a name")
-                        .clone();
-                    let location = self
-                        .data_package
-                        .games
-                        .get(GAME_NAME)
-                        .and_then(|g| g.location_id_to_name().get(&ap.location))
-                        .cloned();
-                    let id_key = I64Key(ap.item);
-                    let ds3_id = self
-                        .connected
-                        .slot_data
-                        .ap_ids_to_item_ids
-                        .get(&id_key)
-                        .expect("Archipelago ID should have a DS3 ID defined in slot data");
-                    let quantity = self
-                        .connected
-                        .slot_data
-                        .item_counts
-                        .get(&id_key)
-                        .copied()
-                        .unwrap_or(1);
-                    Item::new(ap, name, location, ds3_id.0, quantity)
-                }))
+                self.items
+                    .extend(message.items.into_iter().enumerate().map(|(i, ap)| {
+                        let name = self
+                            .data_package
+                            .games
+                            .get(GAME_NAME)
+                            .unwrap_or_else(|| panic!("Expected game data for {}", GAME_NAME))
+                            .item_id_to_name()
+                            .get(&ap.item)
+                            .expect("Expected item ID to have a name")
+                            .clone();
+                        let location = self
+                            .data_package
+                            .games
+                            .get(GAME_NAME)
+                            .and_then(|g| g.location_id_to_name().get(&ap.location))
+                            .cloned();
+                        let id_key = I64Key(ap.item);
+                        let ds3_id = self
+                            .connected
+                            .slot_data
+                            .ap_ids_to_item_ids
+                            .get(&id_key)
+                            .expect("Archipelago ID should have a DS3 ID defined in slot data");
+                        let quantity = self
+                            .connected
+                            .slot_data
+                            .item_counts
+                            .get(&id_key)
+                            .copied()
+                            .unwrap_or(1);
+                        Item::new(
+                            ap,
+                            name,
+                            location,
+                            ds3_id.0,
+                            quantity,
+                            (message.index + (i as i64)) as u64,
+                        )
+                    }))
             }
             ServerMessage::Print(Print { text }) => self.prints.push(RichPrint::message(text)),
             ServerMessage::RichPrint(mut message) => {
