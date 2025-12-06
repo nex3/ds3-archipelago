@@ -1,0 +1,10 @@
+profileVersion = "v1"
+
+[[supports]]
+game = "darksouls3"
+
+[[natives]]
+path = "archipelago.dll"
+
+[[packages]]
+path = "randomizer"

@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.prerelease.outputs.prerelease }}
+    steps:
+    - id: version
+      run: |
+        ver="${{ github.ref_name }}"
+        if [[ "$ver" == v* ]]; then
+          ver="${ver:1}"
+        fi
+        echo "version=$ver" >> "$GITHUB_OUTPUT"
+    - id: prerelease
+      run: |
+        if [[ "${{ github.ref_name }}" == *-* ]]; then
+          echo "prerelease=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "prerelease=false" >> "$GITHUB_OUTPUT"
+        fi
+
+  build-mod:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+    - uses: Swatinem/rust-cache@v2
+
+    - run: cargo build --release
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: archipelago.dll
+        path: target/release/archipelago.dll
+        if-no-files-found: error
+
+  build-static:
+    runs-on: windows-latest
+    needs: [version]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: nex3/SoulsRandomizers
+        ref: rust
+        token: ${{ secrets.GH_TOKEN }}
+        path: SoulsRandomizers
+    - uses: actions/checkout@v4
+      with:
+        repository: thefifthmatt/SoulsIds
+        # Later versions expect AC6 stuff from SoulsFormats which hasn't been published yet.
+        ref: 986346a705799f528d620c19ca384e21cb008b54
+        path: SoulsIds
+    - uses: actions/checkout@v4
+      with:
+        repository: thefifthmatt/SoulsFormats
+        ref: dsms
+        path: SoulsFormats
+    - uses: microsoft/setup-msbuild@v2
+    - uses: actions/checkout@v4
+      with:
+        repository: thefifthmatt/yet-another-tab-control
+        path: yet-another-tab-control
+
+    - name: Install dependencies
+      run: dotnet restore SoulsRandomizers\SoulsRandomizers.sln
+
+    - name: Build randomizer
+      run: dotnet publish -o standard -c 'Release (Archipelago)' .\SoulsRandomizers\DS3Randomizer\DS3Randomizer.csproj
+      env:
+        DS3_AP_VERSION: ${{ needs.version.outputs.version }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: DS3Randomizer.exe
+        path: standard\DS3Randomizer.exe
+        if-no-files-found: error
+
+  build-yaml:
+    runs-on: windows-latest
+    needs: [version]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: ArchipelagoMW/Archipelago
+        token: ${{ secrets.GH_TOKEN }}
+        ref: 0.5.1
+        fetch-depth: 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.11
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-subtests pytest-xdist
+        python ModuleUpdate.py --yes --force --append "WebHostLib\requirements.txt"
+
+    - name: Generate YAML
+      run: |
+        python Launcher.py 'Generate Template Options'
+        Move-Item -Path 'Players\Templates\Dark Souls III.yaml' -Destination 'Dark Souls III Options Template.yaml'
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Dark Souls III Options Template.yaml
+        path: Dark Souls III Options Template.yaml
+        if-no-files-found: error
+
+  build-zip:
+    runs-on: ubuntu-latest
+    needs: [version, build-mod, build-static, build-yaml]
+    env:
+      dir: DS3 Archipelago ${{ needs.version.outputs.version }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: ds3-archipelago
+
+    - uses: actions/checkout@v4
+      with:
+        repository: nex3/SoulsRandomizers
+        ref: rust
+        path: SoulsRandomizers
+
+    - name: Download ModEngine3
+      run: |
+        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-windows-amd64.zip > me3.zip
+
+    - run: unzip -d me3 me3.zip
+
+    - name: Assemble release
+      run: |
+        mv ds3-archipelago/release "$dir"
+        mkdir -p "$dir"/{randomizer/spoiler_logs,bin}
+        mv SoulsRandomizers/dist "$dir/randomizer/dist"
+        mv "$dir/randomizer/dist/Presets" "$dir/randomizer/presets"
+        mv "$dir/randomizer/dist/Base/script" "$dir/randomizer/script"
+        mv "$dir/randomizer/dist/Base/sfx" "$dir/randomizer/sfx"
+        mv me3/bin/* "$dir/bin"
+        mv me3/CHANGELOG.pdf "$dir/ME3-CHANGELOG.pdf"
+        mv me3/LICENSE-APACHE "$dir/ME3-LICENSE-APACHE"
+        mv me3/LICENSE-MIT "$dir/ME3-LICENSE-MIT"
+
+    - name: Download archipelago.dll
+      uses: actions/download-artifact@v4
+      with:
+        name: archipelago.dll
+        path: ${{ env.dir }}
+
+    - name: Download YAML
+      uses: actions/download-artifact@v4
+      with:
+        name: Dark Souls III Options Template.yaml
+        path: ${{ env.dir }}
+
+    - name: Download DS3Randomizer.exe
+      uses: actions/download-artifact@v4
+      with:
+        name: DS3Randomizer.exe
+        path: ${{ env.dir }}/randomizer
+
+    - name: Zip release
+      run: zip -r "${{ env.dir }}.zip" "$dir"
+
+    - uses: softprops/action-gh-release@v2
+      with:
+        body_path: ${{ env.dir }}/README.txt
+        prerelease: ${{ needs.version.outputs.prerelease }}
+        files: ${{ env.dir }}.zip
+        token: ${{ secrets.GH_TOKEN }}
+
+  # Only push tags once everything else builds successfully, so that they don't break redeploys.
+
+  # We'll re-enable this once we actually have any differences relative to the
+  # currently released version.
+  # tag-server:
+  #   runs-on: ubuntu-latest
+  #   needs: [version, build-zip]
+  #
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #     with:
+  #       repository: nex3/Archipelago
+  #       token: ${{ secrets.GH_TOKEN }}
+  #       ref: ds3-4.0
+  #       fetch-depth: 0
+  #
+  #   - run: git tag ds3-${{ needs.version.outputs.version }}
+  #   - run: git push --tag
+
+  tag-static:
+    runs-on: ubuntu-latest
+    needs: [build-zip]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: nex3/SoulsRandomizers
+        ref: rust
+        token: ${{ secrets.GH_TOKEN }}
+
+    - run: git tag ${{ github.ref_name }}
+    - run: git push --tag

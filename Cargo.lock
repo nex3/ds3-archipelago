@@ -47,6 +47,7 @@ dependencies = [
 [[package]]
 name = "archipelago_rs"
 version = "0.2.0"
+source = "git+https://github.com/nex3/archipelago_rs?branch=rich-message#2da7439f21f6242658a881387c2d044362033d12"
 dependencies = [
  "bitflags 2.10.0",
  "futures-util",
@@ -273,6 +274,7 @@ dependencies = [
 [[package]]
 name = "darksouls3"
 version = "0.11.0"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#588626380350adc6b027e8589c90611c93a86c04"
 dependencies = [
  "bitfield",
  "bitflags 2.10.0",
@@ -371,7 +373,7 @@ dependencies = [
 
 [[package]]
 name = "ds3-archipelago"
-version = "4.0.0-alpha"
+version = "4.0.0-alpha.1"
 dependencies = [
  "archipelago_rs",
  "backtrace",
@@ -476,6 +478,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared"
 version = "0.11.0"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#588626380350adc6b027e8589c90611c93a86c04"
 dependencies = [
  "from-singleton",
  "fromsoftware-shared-macros",
@@ -491,6 +494,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.11.0"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#588626380350adc6b027e8589c90611c93a86c04"
 dependencies = [
  "proc-macro2",
  "quote",
