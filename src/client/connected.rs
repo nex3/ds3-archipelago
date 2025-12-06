@@ -144,7 +144,7 @@ impl ConnectedClient {
                         .data_package
                         .games
                         .get(GAME_NAME)
-                        .expect(&format!("Expected game data for {}", GAME_NAME))
+                        .unwrap_or_else(|| panic!("Expected game data for {}", GAME_NAME))
                         .item_id_to_name()
                         .get(&ap.item)
                         .expect("Expected item ID to have a name")
@@ -154,7 +154,7 @@ impl ConnectedClient {
                         .games
                         .get(GAME_NAME)
                         .and_then(|g| g.location_id_to_name().get(&ap.location))
-                        .map(|n| n.clone());
+                        .cloned();
                     let id_key = I64Key(ap.item);
                     let ds3_id = self
                         .connected
@@ -167,7 +167,7 @@ impl ConnectedClient {
                         .slot_data
                         .item_counts
                         .get(&id_key)
-                        .map(|n| *n)
+                        .copied()
                         .unwrap_or(1);
                     Item::new(ap, name, location, ds3_id.0, quantity)
                 }))

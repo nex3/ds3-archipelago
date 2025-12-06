@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use bincode;
 use bincode::{Decode, Encode};
 use darksouls3::sprj::MapItemMan;
 use darksouls3::util::save;

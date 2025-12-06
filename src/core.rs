@@ -305,7 +305,7 @@ impl Core {
             .filter(|id| id.is_archipelago())
             .collect::<Vec<_>>();
 
-        if archipelago_item_ids.len() != 0 {
+        if !archipelago_item_ids.is_empty() {
             for id in archipelago_item_ids {
                 let row = regulation_manager
                     .get_equip_param(id)

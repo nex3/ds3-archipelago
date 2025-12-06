@@ -41,6 +41,7 @@ pub struct ClientConnection {
 }
 
 /// The state of the underlying Archipelago client as of the last received message.
+#[allow(clippy::large_enum_variant)]
 pub enum ClientConnectionState {
     /// The client is in the process of establishing a connection and
     /// downloading the initial data.
@@ -104,13 +105,12 @@ impl ClientConnection {
                 tags_copy,
                 &inner_tx,
                 inner_rx,
-            )) {
-                if let Err(send_err) = inner_tx.blocking_send(Err(e)) {
-                    warn!(
-                        "Failed to send error message from Archipelago client worker thread: \
+            )) && let Err(send_err) = inner_tx.blocking_send(Err(e))
+            {
+                warn!(
+                    "Failed to send error message from Archipelago client worker thread: \
                         {send_err:?}"
-                    );
-                }
+                );
             }
         });
 

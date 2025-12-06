@@ -12,11 +12,10 @@ impl ClipboardBackend for WindowsClipboardBackend {
         };
 
         let mut result = String::new();
-        if let Err(_) = formats::Unicode.read_clipboard(&mut result) {
-            return None;
-        }
-
-        return Some(result);
+        formats::Unicode
+            .read_clipboard(&mut result)
+            .ok()
+            .map(|_| result)
     }
 
     fn set(&mut self, value: &str) {

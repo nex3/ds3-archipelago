@@ -105,14 +105,14 @@ impl Overlay {
                 drop(t);
 
                 ui.disabled(
-                    self.popup_url.len() == 0 || self.popup_slot.len() == 0,
+                    self.popup_url.is_empty() || self.popup_slot.is_empty(),
                     || {
                         if ui.button("Connect") {
                             ui.close_current_popup();
                             if let Err(e) = self.core.update_config(
                                 &self.popup_url,
                                 &self.popup_slot,
-                                if self.popup_password.len() == 0 {
+                                if self.popup_password.is_empty() {
                                     None
                                 } else {
                                     Some(&self.popup_password)
@@ -351,15 +351,15 @@ impl ImguiRenderLoop for Overlay {
         let io = ui.io();
         let mut flag = InputFlags::empty();
         if io.want_capture_mouse {
-            flag = flag | InputFlags::Mouse;
+            flag |= InputFlags::Mouse;
         }
         if io.want_capture_keyboard {
-            flag = flag | InputFlags::Keyboard;
+            flag |= InputFlags::Keyboard;
         }
         if io.want_capture_mouse && io.want_capture_keyboard {
             // Only block pad input if both the mouse and keyboard are blocked
             // (for example if a modal dialog is up).
-            flag = flag | InputFlags::GamePad;
+            flag |= InputFlags::GamePad;
         }
         self.input_blocker.block_only(flag);
 
@@ -455,7 +455,7 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
             Color { color: Yellow, .. } => YELLOW,
             _ => WHITE,
         };
-        ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), &part.to_string());
+        ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), part.to_string());
     }
 }
 
