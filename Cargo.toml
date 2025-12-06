@@ -1,6 +1,6 @@
 [package]
 name = "ds3-archipelago"
-version = "4.0.0-alpha"
+version = "4.0.0-alpha.1"
 edition = "2024"
 
 [lib]
@@ -8,13 +8,13 @@ crate-type = ["cdylib"]
 name = "archipelago"
 
 [dependencies]
-archipelago_rs = { path = "../archipelago_rs" }
+archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "rich-message" }
 backtrace = "0.3.76"
 bincode = "2.0.1"
 chrono = "0.4.42"
 clipboard-win = "5.4.1"
-darksouls3 = { path = "../fromsoftware-rs/crates/darksouls3" }
-fromsoftware-shared = { path = "../fromsoftware-rs/crates/shared" }
+darksouls3 = { git = "https://github.com/nex3/fromsoftware-rs", branch = "darksouls3" }
+fromsoftware-shared = { git = "https://github.com/nex3/fromsoftware-rs", branch = "darksouls3" }
 hudhook = "0.8.1"
 ilhook = {version = "2.3.0", features = ["x64"]}
 imgui = { version = "0.12", features = ["docking", "tables-api"] }
