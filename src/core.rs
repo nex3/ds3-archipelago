@@ -60,7 +60,7 @@ const GRACE_PERIOD: Duration = Duration::from_secs(10);
 
 /// The grace period after either sending or receiving a death link during which
 /// no further death links will be sent or received.
-const DEATH_LINK_GRACE_PERIOD: Duration = Duration::from_secs(1); //30);
+const DEATH_LINK_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
 impl Core {
     /// Creates a new instance of the mod.
