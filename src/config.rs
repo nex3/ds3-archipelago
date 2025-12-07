@@ -38,6 +38,7 @@ impl Config {
             .and_then(|json| fs::write(Self::path(), json).map_err(|e| e.to_string()))
     }
 
+    /// The path to the configuration file.
     fn path() -> PathBuf {
         (*paths::MOD_DIRECTORY).join("apconfig.json")
     }

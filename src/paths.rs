@@ -21,7 +21,7 @@ pub static MOD_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
     if parent.ends_with("target/debug") {
         parent.parent().unwrap().parent().unwrap().join("log")
     } else {
-        parent.join("log")
+        parent.to_path_buf()
     }
 });
 
