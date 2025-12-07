@@ -1,8 +1,8 @@
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::result::Result;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::paths;
@@ -19,24 +19,22 @@ pub struct Config {
 impl Config {
     /// Loads the config from disk, or returns an empty config if none exists on
     /// disk yet.
-    pub fn load_or_default() -> Result<Self, String> {
+    pub fn load_or_default() -> Result<Self> {
         Self::load().map(|config| config.unwrap_or_default())
     }
 
     /// Loads the config from disk, or None if it doesn't exist.
-    pub fn load() -> Result<Option<Self>, String> {
+    pub fn load() -> Result<Option<Self>> {
         match fs::read_to_string(Self::path()) {
-            Ok(text) => Ok(Some(json::from_str(&text).map_err(|e| e.to_string())?)),
+            Ok(text) => Ok(Some(json::from_str(&text)?)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.to_string()),
+            Err(err) => Err(err.into()),
         }
     }
 
     /// Saves the config file to disk.
-    pub fn save(&self) -> Result<(), String> {
-        json::to_string(self)
-            .map_err(|e| e.to_string())
-            .and_then(|json| fs::write(Self::path(), json).map_err(|e| e.to_string()))
+    pub fn save(&self) -> Result<()> {
+        Ok(fs::write(Self::path(), json::to_string(self)?)?)
     }
 
     /// The path to the configuration file.

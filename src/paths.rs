@@ -1,10 +1,10 @@
-use core::result::Result;
 use std::ffi::OsString;
 use std::io;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
+use anyhow::{Result, bail};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleFileNameW, GetModuleHandleExW,
@@ -26,31 +26,27 @@ pub static MOD_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 /// Returns the path to `archipelago.dll`.
-fn current_dll_path() -> Result<PathBuf, String> {
+fn current_dll_path() -> Result<PathBuf> {
     let mut module = HMODULE::default();
     unsafe {
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
             PCWSTR(current_dll_path as *mut u16),
             &mut module,
-        )
+        )?;
     }
-    .map_err(|e| e.to_string())?;
 
     // `GetModuleFileNameW` doesn't have any way to indicate how much room is
     // necessary for the file, so we have to progressively increase our
     // allocation until we hit the appropriate size.
-    let mut size: usize = usize::try_from(MAX_PATH).map_err(|e| e.to_string())?;
+    let mut size: usize = usize::try_from(MAX_PATH)?;
     let mut filename: Vec<u16>;
     const GROWTH_FACTOR: f64 = 1.5;
     loop {
         filename = vec![0; size];
         let n = unsafe { GetModuleFileNameW(module, &mut filename) } as usize;
         if n == 0 {
-            return Err(format!(
-                "GetModuleFileNameW failed: {}",
-                io::Error::last_os_error()
-            ));
+            bail!("GetModuleFileNameW failed: {}", io::Error::last_os_error());
         } else if n == filename.capacity()
             && io::Error::last_os_error()
                 .raw_os_error()

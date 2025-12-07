@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
 use darksouls3::cs::*;
 use darksouls3::param::EQUIP_PARAM_GOODS_ST;
@@ -112,7 +113,7 @@ impl Core {
         url: impl AsRef<str>,
         slot: impl AsRef<str>,
         password: Option<impl AsRef<str>>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         self.config.set_url(url);
         self.config.set_slot(slot);
         self.config.set_password(password);

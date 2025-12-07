@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 name = "archipelago"
 
 [dependencies]
+anyhow = "1.0.100"
 archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "rich-message" }
 backtrace = "0.3.76"
 bincode = "2.0.1"
