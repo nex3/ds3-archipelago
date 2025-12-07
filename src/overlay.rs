@@ -141,9 +141,9 @@ impl Overlay {
                 if ui.button("Connect") {
                     ui.open_popup("#connect");
                     let config = self.core.config();
-                    copy_from_or_clear(&mut self.popup_url, config.url());
-                    copy_from_or_clear(&mut self.popup_slot, config.slot());
-                    copy_from_or_clear(&mut self.popup_password, config.password());
+                    clone_into_or_clear(&mut self.popup_url, config.url());
+                    clone_into_or_clear(&mut self.popup_slot, config.slot());
+                    clone_into_or_clear(&mut self.popup_password, config.password());
                 }
             }
         }
@@ -420,9 +420,9 @@ impl ImColor32Ext for ImColor32 {
 
 /// If [source] is set, copies its contents into [target]. Otherwise, sets
 /// [target] to the empty string.
-fn copy_from_or_clear(target: &mut String, source: Option<&String>) {
+fn clone_into_or_clear(target: &mut String, source: Option<&str>) {
     if let Some(value) = source {
-        target.clone_from(value);
+        value.clone_into(target);
     } else {
         target.clear();
     }
