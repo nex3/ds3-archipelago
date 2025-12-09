@@ -1,6 +1,7 @@
 use std::fmt;
 use std::thread;
 
+use anyhow::{Error, anyhow};
 use archipelago_rs::client::*;
 use archipelago_rs::protocol::*;
 use log::*;
@@ -54,7 +55,7 @@ pub enum ClientConnectionState {
     /// The client is not connected, either because the initial connection
     /// failed or because an established connection was later closed. This
     /// contains a description of the reason for the closure.
-    Disconnected(String),
+    Disconnected(Error),
 }
 
 impl fmt::Debug for ClientConnectionState {
@@ -168,21 +169,23 @@ impl ClientConnection {
         loop {
             match self.rx.try_recv() {
                 Err(TryRecvError::Empty) => return,
-                Err(TryRecvError::Disconnected) => {
+                Err(err) => {
                     // We expect the client to sent a disconnect message or an
                     // error if the connection is closed.
                     self.state = ClientConnectionState::Disconnected(
-                        "Archipelago client worker thread exited unexpectedly".to_string(),
+                        Error::from(err)
+                            .context("Archipelago client worker thread exited unexpectedly"),
                     );
                     return;
                 }
                 Ok(Err(err)) => {
                     warn!("Connection error: {err:?}");
-                    self.state = ClientConnectionState::Disconnected(err.to_string());
+                    self.state = ClientConnectionState::Disconnected(err.into());
                     return;
                 }
                 Ok(Ok(ServerMessage::ConnectionRefused(message))) => {
-                    self.state = ClientConnectionState::Disconnected(message.errors.join(", "));
+                    self.state =
+                        ClientConnectionState::Disconnected(anyhow!(message.errors.join(", ")));
                     return;
                 }
                 Ok(Ok(ServerMessage::RoomInfo(room_info))) => self.room_info = Some(room_info),
@@ -206,10 +209,10 @@ impl ClientConnection {
                 Ok(Ok(message)) => match &mut self.state {
                     ClientConnectionState::Connected(client) => client.update(message),
                     _ => {
-                        self.state = ClientConnectionState::Disconnected(
-                            format!("Unexpected message in {:?}: {message:?}", self.state)
-                                .to_string(),
-                        );
+                        self.state = ClientConnectionState::Disconnected(anyhow!(
+                            "Unexpected message in {:?}: {message:?}",
+                            self.state
+                        ));
                         return;
                     }
                 },

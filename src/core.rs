@@ -2,6 +2,7 @@ use std::any::Any;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
+use archipelago_rs::client::ArchipelagoError;
 use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
 use darksouls3::cs::*;
 use darksouls3::param::EQUIP_PARAM_GOODS_ST;
@@ -139,7 +140,19 @@ impl Core {
         if let Disconnected(err) = self.connection.state() {
             match old_state {
                 SimpleConnectionState::Connecting => {
-                    self.log(format!("Connection failed: {}", err));
+                    self.log(
+                        if let Some(ArchipelagoError::IllegalResponse {
+                            received: "ConnectionRefused",
+                            ..
+                        }) = err.downcast_ref::<ArchipelagoError>()
+                        {
+                            "Connection refused. Make sure the server session is running and the \
+                             URL is up-to-date."
+                                .to_string()
+                        } else {
+                            format!("Connection failed: {}", err)
+                        },
+                    );
                 }
                 SimpleConnectionState::Connected => self.log(format!("Disconnected: {}", err)),
                 _ => {}
