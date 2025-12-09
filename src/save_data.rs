@@ -107,14 +107,4 @@ impl SaveData {
             None
         }
     }
-
-    /// Returns whether this save file's Archipelago seed matches [other],
-    /// indicating that this save file was created for the same Archipelago
-    /// room.
-    pub fn seed_matches(&self, other: impl AsRef<str>) -> bool {
-        match &self.seed {
-            Some(seed) => seed == other.as_ref(),
-            None => false,
-        }
-    }
 }

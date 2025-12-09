@@ -138,6 +138,24 @@ impl ClientConnection {
         &mut self.state
     }
 
+    /// If [state] is [ClientConnectionState::Connected], returns the client as
+    /// an [Option]. Otherwise returns [None].
+    pub fn client(&self) -> Option<&ConnectedClient> {
+        match self.state() {
+            ClientConnectionState::Connected(client) => Some(client),
+            _ => None,
+        }
+    }
+
+    /// If [state] is [ClientConnectionState::Connected], returns the client as
+    /// a mutable [Option]. Otherwise returns [None].
+    pub fn client_mut(&mut self) -> Option<&mut ConnectedClient> {
+        match self.state_mut() {
+            ClientConnectionState::Connected(client) => Some(client),
+            _ => None,
+        }
+    }
+
     /// Processes any incoming messages from the worker thread and updates the
     /// client's state accordingly.
     ///

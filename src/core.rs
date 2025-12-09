@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
 use darksouls3::cs::*;
 use darksouls3::param::EQUIP_PARAM_GOODS_ST;
@@ -26,8 +26,8 @@ pub struct Core {
     /// The log of prints displayed in the overlay.
     log_buffer: Vec<RichPrint>,
 
-    /// The Archipelago client connection, if it's connected.
-    connection: Option<ClientConnection>,
+    /// The Archipelago client connection.
+    connection: ClientConnection,
 
     /// The time we last granted an item to the player. Used to ensure we don't
     /// give more than one item per second.
@@ -65,40 +65,38 @@ const DEATH_LINK_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
 impl Core {
     /// Creates a new instance of the mod.
-    pub fn new() -> Self {
-        let config = match Config::load_or_default() {
-            Ok(config) => config,
-            Err(e) => panic!("Failed to load config: {e:?}"),
-        };
-
-        let mut ap_mod = Self {
+    pub fn new() -> Result<Self> {
+        let config = Config::load()?;
+        let connection = Self::new_connection(&config);
+        Ok(Self {
             config,
-            connection: None,
+            connection: connection,
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,
             locations_sent: 0,
             last_death_link: Instant::now(),
             sent_goal: false,
-        };
+        })
+    }
 
-        if ap_mod.config.url().is_some() && ap_mod.config.slot().is_some() {
-            ap_mod.connect();
-        }
-
-        ap_mod
+    /// Creates a new [ClientConnection] based on the connection information in [config].
+    fn new_connection(config: &Config) -> ClientConnection {
+        ClientConnection::new(
+            config.url(),
+            config.slot(),
+            config.password().as_ref(),
+            ItemsHandlingFlags::OTHER_WORLDS & ItemsHandlingFlags::STARTING_INVENTORY,
+            vec!["DeathLink".to_string()],
+        )
     }
 
     /// Returns the simplified connection state for [client].
     pub fn simple_connection_state(&self) -> SimpleConnectionState {
-        if let Some(connection) = self.connection.as_ref() {
-            match connection.state() {
-                Disconnected(_) => SimpleConnectionState::Disconnected,
-                Connecting => SimpleConnectionState::Connecting,
-                Connected(_) => SimpleConnectionState::Connected,
-            }
-        } else {
-            SimpleConnectionState::Disconnected
+        match self.connection.state() {
+            Disconnected(_) => SimpleConnectionState::Disconnected,
+            Connecting => SimpleConnectionState::Connecting,
+            Connected(_) => SimpleConnectionState::Connected,
         }
     }
 
@@ -107,29 +105,18 @@ impl Core {
         &self.config
     }
 
-    /// Update the user config with the given fields.
-    pub fn update_config(
-        &mut self,
-        url: impl AsRef<str>,
-        slot: impl AsRef<str>,
-        password: Option<impl AsRef<str>>,
-    ) -> Result<()> {
+    /// Updates the URL to use to connect to Archipelago and reconnects the
+    /// Archipelago session.
+    pub fn update_url(&mut self, url: impl AsRef<str>) -> Result<()> {
         self.config.set_url(url);
-        self.config.set_slot(slot);
-        self.config.set_password(password);
-        self.config.save()
+        self.config.save()?;
+        self.connection = Self::new_connection(&self.config);
+        Ok(())
     }
 
     /// Returns a reference to the Archipelago client, if it's connected.
     pub fn client(&self) -> Option<&ConnectedClient> {
-        if let Some(connection) = self.connection.as_ref() {
-            match connection.state() {
-                Connected(client) => Some(client),
-                _ => None,
-            }
-        } else {
-            None
-        }
+        self.connection.client()
     }
 
     /// Returns the list of all logs that have been emitted in the current
@@ -140,27 +127,29 @@ impl Core {
 
     /// A function that's run just before rendering the overlay UI in every
     /// frame render. This is where the core logic of the mod takes place.
-    pub fn tick(&mut self) {
-        // We can't pattern match here because we need to use self.connection
-        // mutably while also calling `self.log()` which is a different mutable
-        // self borrow.
-        if self.connection.is_some() {
-            let old_state = self.simple_connection_state();
+    ///
+    /// Thistakes an [error] parameter which indicates that a fatal error is
+    /// currently being displayed to the user and the mod shouldn't process any
+    /// more game logic. It only returns an error if the mod has hit a fatal
+    /// failure and can't continue any longer.
+    pub fn tick(&mut self, error: bool) -> Result<()> {
+        let old_state = self.simple_connection_state();
+        self.connection.update();
 
-            {
-                let connection = self.connection.as_mut().unwrap();
-                connection.update();
-            }
-
-            if let Disconnected(err) = self.connection.as_ref().unwrap().state() {
-                match old_state {
-                    SimpleConnectionState::Connecting => {
-                        self.log(format!("Connection failed: {}", err));
-                    }
-                    SimpleConnectionState::Connected => self.log(format!("Disconnected: {}", err)),
-                    _ => {}
+        if let Disconnected(err) = self.connection.state() {
+            match old_state {
+                SimpleConnectionState::Connecting => {
+                    self.log(format!("Connection failed: {}", err));
                 }
+                SimpleConnectionState::Connected => self.log(format!("Disconnected: {}", err)),
+                _ => {}
             }
+        }
+
+        self.process_new_prints();
+
+        if error {
+            return Ok(());
         }
 
         // Safety: It should be safe to access the item man during a frame draw,
@@ -172,59 +161,133 @@ impl Core {
             self.load_time = Some(Instant::now());
         }
 
-        self.process_new_prints();
-
-        if let Some(connection) = self.connection.as_ref()
-            && let Connected(client) = connection.state()
-            && let Some(save_data) = SaveData::instance_mut().as_mut()
-        {
-            if save_data.seed.is_none() {
-                // If the connection seed exists and the saved seed doesn't,
-                // we're presumably on a new file. Write the connection seed to
-                // the save data so we can surface conflicts in the future.
-                save_data.seed = Some(client.room_info().seed_name.clone());
-            } else if !save_data.seed_matches(&client.room_info().seed_name) {
-                // If there's an unresolved conflict between the saved and
-                // connected seeds, don't make any changes until it's resolved.
-                return;
-            }
-        }
-
         if let Some(time) = self.load_time
             && time.elapsed() < GRACE_PERIOD
         {
-            return;
+            return Ok(());
         }
 
+        self.check_version_conflict()?;
+
+        self.check_seed_conflict()?;
+        if let Some(save_data) = SaveData::instance_mut().as_mut()
+            && save_data.seed.is_none()
+        {
+            save_data.seed = Some(self.config.seed().to_string());
+        };
+
+        self.check_dlc_error()?;
         self.process_incoming_items(item_man);
         self.process_inventory_items();
         self.handle_death_link();
         self.handle_goal();
+
+        Ok(())
     }
 
     /// Handle new prints that come from the Archipelago server.
     fn process_new_prints(&mut self) {
-        let Some(connection) = self.connection.as_mut() else {
-            return;
-        };
-        let Connected(client) = connection.state_mut() else {
-            return;
-        };
-
-        let new_prints = client.prints();
+        let new_prints = self
+            .connection
+            .client_mut()
+            .map(|c| c.prints())
+            .unwrap_or_default();
         for message in &new_prints {
             info!("[APS] {message}");
         }
         self.log_buffer.extend(new_prints);
     }
 
+    /// Returns an error if the user's static randomizer version doesn't match
+    /// this mod's version.
+    fn check_version_conflict(&self) -> Result<()> {
+        if self.config().client_version() != env!("CARGO_PKG_VERSION") {
+            bail!(
+                "This save was generated using static randomizer v{}, but this client is v{}. \
+                 Re-run the static randomizer with the current version.",
+                self.config().client_version(),
+                env!("CARGO_PKG_VERSION"),
+            );
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Returns an error if there's a conflict between the notion of the current
+    /// seed in the server, the save, and/or the config. Also updates the save
+    /// data's notion based on whatever is available if it doesn't exist yet.
+    fn check_seed_conflict(&mut self) -> Result<()> {
+        let client_seed = self
+            .connection
+            .client()
+            .map(|c| c.room_info().seed_name.as_str());
+        let save = SaveData::instance();
+        let save_seed = save.as_ref().and_then(|s| s.seed.as_ref());
+
+        match (client_seed, save_seed) {
+            (Some(client_seed), _) if client_seed != self.config.seed() => bail!(
+                "You've connected to a different Archipelago multiworld than the one that \
+                 DS3Randomizer.exe used!\n\
+                 \n\
+		 Connected room seed: {}\n\
+                 DS3Randomizer.exe seed: {}",
+                client_seed,
+                self.config.seed()
+            ),
+            (Some(client_seed), Some(save_seed)) if client_seed != save_seed => bail!(
+                "You've connected to a different Archipelago multiworld than the one that \
+                 you used before with this save!\n\
+                 \n\
+		 Connected room seed: {}\n\
+		 Save file seed: {}",
+                client_seed,
+                save_seed
+            ),
+            (_, Some(save_seed)) if self.config.seed() != save_seed => bail!(
+                "Your most recent DS3Randomizer.exe invocation connected to a different \
+                 Archipealgo multiworld than the one that you used before with this save!\n\
+                 \n\
+                 DS3Randomizer.exe seed: {}\n\
+                 Save file seed: {}",
+                self.config.seed(),
+                save_seed
+            ),
+            _ => Ok(()),
+        }
+    }
+
+    /// Returns an error if [config] expects DLC to be installed and it is not.
+    fn check_dlc_error(&self) -> Result<()> {
+        if let Connected(client) = self.connection.state() &&
+            let Ok(dlc) = (unsafe { CSDlc::instance() }) &&
+            // The DLC always registers as not installed until the player clicks
+            // through the initial opening screen and loads their global save
+            // data. Ideally we should find a better way of detecting when that
+            // happens, but for now we just wait to indicate an error until
+            // they're actually in a game.
+            (unsafe { GameDataMan::instance() }).is_ok() &&
+            client.connected().slot_data.options.enable_dlc
+            && (!dlc.dlc1_installed || !dlc.dlc2_installed)
+        {
+            bail!(
+                "DLC is enabled for this seed but your game is missing {}.",
+                if dlc.dlc1_installed {
+                    "the Ringed City DLC"
+                } else if dlc.dlc2_installed {
+                    "the Ashes of Ariandel DLC"
+                } else {
+                    "both DLCs"
+                }
+            );
+        } else {
+            Ok(())
+        }
+    }
+
     /// Handle new items, distributing them to the player when appropriate. This
     /// also initializes the [SaveData] for a new file.
     fn process_incoming_items(&mut self, item_man: InstanceResult<&mut MapItemMan>) {
-        let Some(connection) = self.connection.as_mut() else {
-            return;
-        };
-        let Connected(client) = connection.state_mut() else {
+        let Connected(client) = self.connection.state_mut() else {
             return;
         };
         let Ok(item_man) = item_man else {
@@ -330,8 +393,7 @@ impl Core {
             }
         }
 
-        if let Some(connection) = self.connection.as_mut()
-            && let Connected(client) = connection.state_mut()
+        if let Connected(client) = self.connection.state_mut()
             && save_data.locations.len() > self.locations_sent
         {
             client.location_checks(save_data.locations.iter().copied());
@@ -345,10 +407,7 @@ impl Core {
         if self.last_death_link.elapsed() < DEATH_LINK_GRACE_PERIOD {
             return;
         }
-        let Some(connection) = self.connection.as_mut() else {
-            return;
-        };
-        let Connected(client) = connection.state_mut() else {
+        let Connected(client) = self.connection.state_mut() else {
             return;
         };
         let Ok(player) = (unsafe { PlayerIns::instance() }) else {
@@ -370,7 +429,7 @@ impl Core {
     /// Detects when the player has won the game and notifies the server.
     pub fn handle_goal(&mut self) {
         if let Ok(event_man) = (unsafe { SprjEventFlagMan::instance() })
-            && let Some(client) = self.client()
+            && let Connected(client) = self.connection.state()
             && !self.sent_goal
             && event_man.get_flag(14100800.try_into().unwrap())
         {
@@ -381,20 +440,7 @@ impl Core {
 
     /// The player's slot ID, if it's known.
     pub fn slot(&self) -> Option<i64> {
-        Some(self.client()?.connected().slot)
-    }
-
-    /// Initiates a new connection to the Archipelago server based on the data
-    /// in the [config]. As a precondition, this requires the config's URL and
-    /// slot to be set.
-    pub fn connect(&mut self) {
-        self.connection = Some(ClientConnection::new(
-            self.config.url().unwrap(),
-            self.config.slot().unwrap(),
-            self.config.password(),
-            ItemsHandlingFlags::OTHER_WORLDS & ItemsHandlingFlags::STARTING_INVENTORY,
-            vec!["DeathLink".to_string()],
-        ));
+        self.connection.client().map(|c| c.connected().slot)
     }
 
     /// Writes a message to the log buffer that we display to the user in the

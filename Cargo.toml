@@ -19,8 +19,10 @@ fromsoftware-shared = { git = "https://github.com/nex3/fromsoftware-rs", branch 
 hudhook = "0.8.1"
 ilhook = {version = "2.3.0", features = ["x64"]}
 imgui = { version = "0.12", features = ["docking", "tables-api"] }
+imgui-sys = "0.12.0"
 json = { package = "serde_json", version = "1.0.145" }
 log = "0.4.28"
+mint = "0.5.9"
 pelite = "0.10"
 serde = { version = "1.0.228", features = ["derive"] }
 simplelog = "0.12.2"

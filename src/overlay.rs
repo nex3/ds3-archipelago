@@ -1,15 +1,12 @@
 use archipelago_rs::protocol::{RichMessageColor, RichMessagePart, RichPrint};
-use darksouls3::util::input::*;
-use hudhook::{ImguiRenderLoop, RenderContext};
+use hudhook::RenderContext;
 use imgui::*;
 use log::*;
 
-use darksouls3::{cs::CSDlc, sprj::GameDataMan};
-use fromsoftware_shared::FromStatic;
+use anyhow::Result;
 
-use crate::clipboard_backend::WindowsClipboardBackend;
 use crate::core::{Core, SimpleConnectionState};
-use crate::save_data::*;
+use crate::utils::PopupModalExt;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -31,21 +28,12 @@ pub struct Overlay {
     /// UI-related.
     core: Core,
 
-    /// The struct that's used to block and unblock input going to DS3.
-    input_blocker: &'static InputBlocker,
-
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
 
     /// The URL field in the modal connection popup.
     popup_url: String,
-
-    /// The slot name field in the modal connection popup.
-    popup_slot: String,
-
-    /// The password field in the modal connection popup.
-    popup_password: String,
 
     /// The text the user typed in the say input.
     say_input: String,
@@ -70,60 +58,85 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new(input_blocker: &'static InputBlocker) -> Self {
-        Self {
-            core: Core::new(),
-            input_blocker,
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            core: Core::new()?,
             viewport_size: None,
             popup_url: String::new(),
-            popup_slot: String::new(),
-            popup_password: String::new(),
             say_input: String::new(),
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
-        }
+        })
+    }
+
+    /// Like [ImguiRenderLoop.render], except that this can return a [Result] to
+    /// signal a fatal error.
+    ///
+    /// The [error] flag indicates whether this has experienced a fatal error
+    /// that it's in the process of displaying to the user.
+    pub fn render(&mut self, ui: &mut Ui, error: bool) -> Result<()> {
+        self.core.tick(error)?;
+
+        let Some(viewport_size) = self.viewport_size else {
+            return Ok(());
+        };
+
+        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
+            .build(|| {
+                ui.set_window_font_scale(1.8);
+
+                self.render_connection_widget(ui);
+                ui.separator();
+                self.render_log_window(ui);
+                self.render_say_input(ui);
+                self.render_url_popup(ui);
+            });
+
+        Ok(())
+    }
+
+    /// Like [ImguiRenderLoop.before_render].
+    pub fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
     }
 
     /// Renders the modal popup which queries the player for connection
     /// information.
-    fn render_connection_popup(&mut self, ui: &Ui) {
-        ui.modal_popup_config("#connect")
+    fn render_url_popup(&mut self, ui: &Ui) {
+        ui.modal_popup_config("#url-popup")
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
+            .size([600., 0.], Condition::FirstUseEver)
             .build(|| {
-                let t = ui.push_item_width(400.);
-                ui.input_text("Room URL", &mut self.popup_url)
-                    .hint("archipelago.gg:12345")
-                    .chars_noblank(true)
-                    .build();
-                ui.input_text("Player Name", &mut self.popup_slot).build();
-                ui.input_text("Password", &mut self.popup_password)
-                    .password(true)
-                    .build();
-                drop(t);
+                {
+                    let _ = ui.push_item_width(600.);
+                    ui.input_text("Room URL", &mut self.popup_url)
+                        .hint("archipelago.gg:12345")
+                        .chars_noblank(true)
+                        .build();
+                }
 
-                ui.disabled(
-                    self.popup_url.is_empty() || self.popup_slot.is_empty(),
-                    || {
-                        if ui.button("Connect") {
-                            ui.close_current_popup();
-                            if let Err(e) = self.core.update_config(
-                                &self.popup_url,
-                                &self.popup_slot,
-                                if self.popup_password.is_empty() {
-                                    None
-                                } else {
-                                    Some(&self.popup_password)
-                                },
-                            ) {
-                                error!("Failed to save config: {e}");
-                            }
-                            self.core.connect();
+                ui.disabled(self.popup_url.is_empty(), || {
+                    if ui.button("Connect") {
+                        ui.close_current_popup();
+                        if let Err(e) = self.core.update_url(&self.popup_url) {
+                            error!("Failed to save config: {e}");
                         }
-                    },
-                );
+                    }
+                });
             });
     }
 
@@ -138,12 +151,9 @@ impl Overlay {
             SimpleConnectionState::Disconnected => {
                 ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
                 ui.same_line();
-                if ui.button("Connect") {
-                    ui.open_popup("#connect");
-                    let config = self.core.config();
-                    clone_into_or_clear(&mut self.popup_url, config.url());
-                    clone_into_or_clear(&mut self.popup_slot, config.slot());
-                    clone_into_or_clear(&mut self.popup_password, config.password());
+                if ui.button("Change URL") {
+                    ui.open_popup("#url-popup");
+                    self.core.config().url().clone_into(&mut self.popup_url);
                 }
             }
         }
@@ -215,196 +225,6 @@ impl Overlay {
             }
         });
     }
-
-    /// Renders the popup window alerting the user that their connected seed
-    /// doesn't match their saved seed. Returns whether the popup was rendered.
-    fn render_version_conflict_popup(&mut self, ui: &Ui) -> bool {
-        let Some(version) = self.core.config().version() else {
-            return false;
-        };
-        if version == env!("CARGO_PKG_VERSION") {
-            return false;
-        }
-
-        fatal_error(
-            ui,
-            130.,
-            format!(
-                "This save was generated using static randomizer v{}, but this \
-                 client is v{}. Re-run the static randomizer with the current \
-                 version.",
-                version,
-                env!("CARGO_PKG_VERSION"),
-            ),
-        );
-        true
-    }
-
-    /// Renders the popup window alerting the user that their Archipelago config
-    /// expects DLC to be installed. Returns whether the popup was rendered.
-    fn render_dlc_error_popup(&mut self, ui: &Ui) -> bool {
-        let Some(client) = self.core.client() else {
-            return false;
-        };
-        let Ok(dlc) = (unsafe { CSDlc::instance() }) else {
-            return false;
-        };
-        if !client.connected().slot_data.options.enable_dlc
-            || (dlc.dlc1_installed && dlc.dlc2_installed)
-        {
-            return false;
-        }
-
-        // The DLC always registers as not installed until the player clicks
-        // through the initial opening screen and loads their global save data.
-        // Ideally we should find a better way of detecting when that happens,
-        // but for now we just wait to indicate an error until they're actually
-        // in a game.
-        if (unsafe { GameDataMan::instance() }).is_err() {
-            return false;
-        };
-
-        let dlcs = if dlc.dlc1_installed {
-            "the Ringed City DLC"
-        } else if dlc.dlc2_installed {
-            "the Ashes of Ariandel DLC"
-        } else {
-            "both DLCs"
-        };
-
-        fatal_error(
-            ui,
-            90.,
-            format!(
-                "DLC is enabled for this seed but your game is missing {}.",
-                dlcs
-            ),
-        );
-        true
-    }
-
-    /// Renders the popup window alerting the user that their connected seed
-    /// doesn't match their saved seed.
-    fn render_seed_conflict_popup(&mut self, ui: &Ui) {
-        let Some(client) = self.core.client() else {
-            return;
-        };
-        let mut save_data = SaveData::instance_mut();
-        let Some(save_data) = save_data.as_mut() else {
-            return;
-        };
-        if save_data.seed_matches(&client.room_info().seed_name) {
-            return;
-        }
-
-        ui.open_popup("#seed-conflict");
-        ui.modal_popup_config("#seed-conflict")
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .build(|| {
-                // Without a wrapper window, the size of the popup ends up
-                // narrow and tall. There seems to be no way to control this
-                // directly with the Rust UI.
-                let Some(_tok) = ui
-                    .child_window("#seed-conflict-window")
-                    .size([600., 250.])
-                    .begin()
-                else {
-                    return;
-                };
-                ui.set_window_font_scale(1.8);
-
-                ui.text_wrapped(format!(
-                    "You've connected to a different Archipelago multiworld \
-                     than the one that you used before with this save!\n\
-                     \n\
-		     Save file seed: {}\n\
-		     Connected room seed: {}\n\
-		     \n\
-		     Continue connecting and overwrite the save file seed?",
-                    save_data.seed.as_ref().unwrap(),
-                    client.room_info().seed_name,
-                ));
-
-                ui.separator();
-                if ui.button("Overwrite") {
-                    save_data.seed = Some(client.room_info().seed_name.clone());
-                    return;
-                }
-
-                ui.same_line_with_spacing(0., 20.);
-                if ui.button("Exit") {
-                    // TODO: It would be cool if we could quit out of the save
-                    // file to the main menu rather than outright killing the
-                    // program. There may be something in GameMan for that...
-                    std::process::exit(1);
-                }
-            });
-    }
-}
-
-impl ImguiRenderLoop for Overlay {
-    fn render(&mut self, ui: &mut Ui) {
-        self.core.tick();
-
-        let io = ui.io();
-        let mut flag = InputFlags::empty();
-        if io.want_capture_mouse {
-            flag |= InputFlags::Mouse;
-        }
-        if io.want_capture_keyboard {
-            flag |= InputFlags::Keyboard;
-        }
-        if io.want_capture_mouse && io.want_capture_keyboard {
-            // Only block pad input if both the mouse and keyboard are blocked
-            // (for example if a modal dialog is up).
-            flag |= InputFlags::GamePad;
-        }
-        self.input_blocker.block_only(flag);
-
-        let Some(viewport_size) = self.viewport_size else {
-            // Work around veeenu/hudhook#235
-            ui.window("tmp")
-                .size([100., 100.], Condition::Always)
-                .position([-200., -200.], Condition::Always)
-                .build(|| {});
-            return;
-        };
-
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .build(|| {
-                ui.set_window_font_scale(1.8);
-
-                self.render_connection_widget(ui);
-                ui.separator();
-                self.render_log_window(ui);
-                self.render_connection_popup(ui);
-                self.render_say_input(ui);
-                if !self.render_version_conflict_popup(ui) && !self.render_dlc_error_popup(ui) {
-                    self.render_seed_conflict_popup(ui);
-                }
-            });
-    }
-
-    fn initialize<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
-        ctx.set_clipboard_backend(WindowsClipboardBackend {});
-    }
-
-    fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
-    }
 }
 
 trait ImColor32Ext {
@@ -415,16 +235,6 @@ trait ImColor32Ext {
 impl ImColor32Ext for ImColor32 {
     fn with_alpha(&self, alpha: u8) -> ImColor32 {
         ImColor32::from_bits((self.to_bits() & 0x00ffffff) | ((alpha as u32) << 24))
-    }
-}
-
-/// If [source] is set, copies its contents into [target]. Otherwise, sets
-/// [target] to the empty string.
-fn clone_into_or_clear(target: &mut String, source: Option<&str>) {
-    if let Some(value) = source {
-        value.clone_into(target);
-    } else {
-        target.clear();
     }
 }
 
@@ -457,34 +267,4 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
         };
         ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), part.to_string());
     }
-}
-
-/// Renders a window with the given [message] that can only exit the program
-/// when the user interacts with it.
-fn fatal_error(ui: &Ui, height: f32, message: impl AsRef<str>) {
-    ui.open_popup("#fatal-error");
-    ui.modal_popup_config("#fatal-error")
-        .title_bar(false)
-        .collapsible(false)
-        .resizable(false)
-        .build(|| {
-            // Without a wrapper window, the size of the popup ends up
-            // narrow and tall. There seems to be no way to control this
-            // directly with the Rust UI.
-            let Some(_tok) = ui
-                .child_window("#fatal-error-window")
-                .size([600., height])
-                .begin()
-            else {
-                return;
-            };
-            ui.set_window_font_scale(1.8);
-
-            ui.text_wrapped(message);
-
-            ui.separator();
-            if ui.button("Exit") {
-                std::process::exit(1);
-            }
-        });
 }
