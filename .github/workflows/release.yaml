@@ -209,7 +209,7 @@ jobs:
         prerelease: ${{ needs.version.outputs.prerelease }}
         files: |
           ${{ env.dir }}-windows.zip
-          ${{ env.dir }}-linux.zip
+          ${{ env.dir }}-linux.tar.gz
         token: ${{ secrets.GH_TOKEN }}
 
   # Only push tags once everything else builds successfully, so that they don't break redeploys.
