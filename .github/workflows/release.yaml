@@ -192,14 +192,14 @@ jobs:
     - name: Zip release
       run: zip -r "${{ env.dir }}-windows.zip" "$dir"
 
-    - run: tar xzf me3-linux.tar.gz
+    - run: tar xzf me3-linux.tar.gz --one-top-level=me3-linux
 
     - name: Assemble Linux release
       run: |
         cp -r ds3-archipelago/release/* "$dir"
         rm "$dir/launch-ds3.bat"
         rm -r "$dir/bin"
-        mv me3-linux-amd64/bin "$dir/bin"
+        mv me3-linux/bin "$dir/bin"
 
     - run: tar czf "${{ env.dir }}-linux.tar.gz" "$dir"
 
