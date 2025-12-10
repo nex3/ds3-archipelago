@@ -278,7 +278,7 @@ impl Core {
             // data. Ideally we should find a better way of detecting when that
             // happens, but for now we just wait to indicate an error until
             // they're actually in a game.
-            (unsafe { GameDataMan::instance() }).is_ok() &&
+            (unsafe { MapItemMan::instance() }).is_ok() &&
             client.connected().slot_data.options.enable_dlc
             && (!dlc.dlc1_installed || !dlc.dlc2_installed)
         {
