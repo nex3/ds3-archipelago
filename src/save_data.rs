@@ -28,7 +28,8 @@ pub struct SaveData {
     pub items_granted: u64,
 
     /// The set of Archipelago locations that this player has accessed so far in
-    /// this game.
+    /// this game. We don't strictly need to track this, but it helps us avoid
+    /// being overly chatty with the server.
     pub locations: HashSet<i64>,
 
     /// The Archipelago seed this save file was last connected to. This is used
@@ -55,8 +56,17 @@ impl SaveData {
             }));
 
             std::mem::forget(save::on_load(|load_type| {
-                let save::OnLoadType::SavedData(bytes) = load_type else {
-                    return;
+                use save::OnLoadType::*;
+                let bytes = match load_type {
+                    SavedData(bytes) => bytes,
+                    MainMenu => {
+                        // If the player goes back to the main menu, reset the
+                        // granted items so that if the user starts a new file
+                        // they get all new items.
+                        (*INSTANCE.write().unwrap()).items_granted = 0;
+                        return;
+                    }
+                    _ => return,
                 };
 
                 match bincode::decode_from_slice(bytes, CONFIG) {
