@@ -207,9 +207,9 @@ jobs:
       with:
         body_path: ${{ env.dir }}/README.txt
         prerelease: ${{ needs.version.outputs.prerelease }}
-        files:
-        - ${{ env.dir }}-windows.zip
-        - ${{ env.dir }}-linux.zip
+        files: |
+          ${{ env.dir }}-windows.zip
+          ${{ env.dir }}-linux.zip
         token: ${{ secrets.GH_TOKEN }}
 
   # Only push tags once everything else builds successfully, so that they don't break redeploys.
