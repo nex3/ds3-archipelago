@@ -2,7 +2,6 @@ use std::{env, path::PathBuf};
 
 use anyhow::Result;
 use imgui::*;
-use json;
 use mint::Vector2;
 
 /// The logic underlying [mod_directory].

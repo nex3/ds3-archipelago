@@ -71,7 +71,7 @@ impl Core {
         let connection = Self::new_connection(&config);
         Ok(Self {
             config,
-            connection: connection,
+            connection,
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,

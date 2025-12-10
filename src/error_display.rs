@@ -119,8 +119,8 @@ impl ImguiRenderLoop for ErrorDisplay {
         ctx: &mut Context,
         render_context: &'a mut dyn RenderContext,
     ) {
-        self.overlay
-            .as_mut()
-            .map(|o| o.before_render(ctx, render_context));
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.before_render(ctx, render_context);
+        }
     }
 }

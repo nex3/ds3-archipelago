@@ -63,7 +63,7 @@ impl SaveData {
                         // If the player goes back to the main menu, reset the
                         // granted items so that if the user starts a new file
                         // they get all new items.
-                        (*INSTANCE.write().unwrap()).items_granted = 0;
+                        INSTANCE.write().unwrap().items_granted = 0;
                         return;
                     }
                     _ => return,
