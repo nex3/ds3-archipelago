@@ -214,11 +214,13 @@ impl Core {
     /// Returns an error if the user's static randomizer version doesn't match
     /// this mod's version.
     fn check_version_conflict(&self) -> Result<()> {
-        if self.config().client_version() != env!("CARGO_PKG_VERSION") {
+        if let Some(client_version) = self.config().client_version()
+            && client_version != env!("CARGO_PKG_VERSION")
+        {
             bail!(
                 "This save was generated using static randomizer v{}, but this client is v{}. \
                  Re-run the static randomizer with the current version.",
-                self.config().client_version(),
+                client_version,
                 env!("CARGO_PKG_VERSION"),
             );
         } else {

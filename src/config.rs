@@ -11,7 +11,7 @@ pub struct Config {
     url: String,
     slot: String,
     seed: String,
-    client_version: String,
+    client_version: Option<String>,
     password: Option<String>,
 }
 
@@ -73,9 +73,10 @@ impl Config {
     }
 
     /// Returns the version of DS3Randomizer.exe that the config was created
-    /// with, or None if it doesn't contain a version.
-    pub fn client_version(&self) -> &str {
-        self.client_version.as_str()
+    /// with, or None if it doesn't contain a version (such as for a local
+    /// randomizer build).
+    pub fn client_version(&self) -> Option<&str> {
+        self.client_version.as_deref()
     }
 
     /// Returns the password that the config was created with, or None if it
