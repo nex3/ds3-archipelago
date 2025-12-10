@@ -149,22 +149,27 @@ jobs:
 
     - name: Download ModEngine3
       run: |
-        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-windows-amd64.zip > me3.zip
+        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-windows-amd64.zip > me3-windows.zip
+        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-linux-amd64.tar.gz > me3-linux.tar.gz
 
-    - run: unzip -d me3 me3.zip
+    - run: unzip -d me3-windows me3-windows.zip
 
-    - name: Assemble release
+    - name: Assemble Windows release
       run: |
-        mv ds3-archipelago/release "$dir"
-        mkdir -p "$dir"/{randomizer/spoiler_logs,bin}
+        mkdir "$dir"
+        cp -r ds3-archipelago/release/* "$dir"
+        mkdir -p "$dir"/randomizer/spoiler_logs
         mv SoulsRandomizers/dist "$dir/randomizer/dist"
         mv "$dir/randomizer/dist/Presets" "$dir/randomizer/presets"
         mv "$dir/randomizer/dist/Base/script" "$dir/randomizer/script"
         mv "$dir/randomizer/dist/Base/sfx" "$dir/randomizer/sfx"
-        mv me3/bin/* "$dir/bin"
-        mv me3/CHANGELOG.pdf "$dir/ME3-CHANGELOG.pdf"
-        mv me3/LICENSE-APACHE "$dir/ME3-LICENSE-APACHE"
-        mv me3/LICENSE-MIT "$dir/ME3-LICENSE-MIT"
+        mv me3-windows/CHANGELOG.pdf "$dir/ME3-CHANGELOG.pdf"
+        mv me3-windows/LICENSE-APACHE "$dir/ME3-LICENSE-APACHE"
+        mv me3-windows/LICENSE-MIT "$dir/ME3-LICENSE-MIT"
+
+        # Windows-specific
+        mv me3-windows/bin "$dir/bin"
+        rm "$dir/launch-ds3.sh"
 
     - name: Download archipelago.dll
       uses: actions/download-artifact@v4
@@ -185,13 +190,26 @@ jobs:
         path: ${{ env.dir }}/randomizer
 
     - name: Zip release
-      run: zip -r "${{ env.dir }}.zip" "$dir"
+      run: zip -r "${{ env.dir }}-windows.zip" "$dir"
+
+    - run: tar xzf me3-linux.tar.gz
+
+    - name: Assemble Linux release
+      run: |
+        cp -r ds3-archipelago/release/* "$dir"
+        rm "$dir/launch-ds3.bat"
+        rm -r "$dir/bin"
+        mv me3-linux-amd64/bin "$dir/bin"
+
+    - run: tar czf "${{ env.dir }}-linux.tar.gz" "$dir"
 
     - uses: softprops/action-gh-release@v2
       with:
         body_path: ${{ env.dir }}/README.txt
         prerelease: ${{ needs.version.outputs.prerelease }}
-        files: ${{ env.dir }}.zip
+        files:
+        - ${{ env.dir }}-windows.zip
+        - ${{ env.dir }}-linux.zip
         token: ${{ secrets.GH_TOKEN }}
 
   # Only push tags once everything else builds successfully, so that they don't break redeploys.
