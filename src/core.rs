@@ -218,8 +218,8 @@ impl Core {
             && client_version != env!("CARGO_PKG_VERSION")
         {
             bail!(
-                "This save was generated using static randomizer v{}, but this client is v{}. \
-                 Re-run the static randomizer with the current version.",
+                "Your apconfig.json was generated using static randomizer v{}, but this client is \
+                 v{}. Re-run the static randomizer with the current version.",
                 client_version,
                 env!("CARGO_PKG_VERSION"),
             );
