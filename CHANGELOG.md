@@ -1,5 +1,8 @@
 ## 4.0.0-alpha.3
 
+* Fix a bug that was causing "object reference not set to an instance of an
+  object" errors.
+
 * Improve the static randomizer feedback for invalid enemy presets.
 
 ## 4.0.0-alpha.2
