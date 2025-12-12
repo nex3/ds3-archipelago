@@ -1,3 +1,7 @@
+## 4.0.0-alpha.4
+
+* Fix the path to the ME3 config file in the `launch-ds3.sh` script for Linux.
+
 ## 4.0.0-alpha.3
 
 * Fix a bug that was causing "object reference not set to an instance of an
