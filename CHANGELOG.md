@@ -1,3 +1,7 @@
+## 4.0.0-alpha.3
+
+* Improve the static randomizer feedback for invalid enemy presets.
+
 ## 4.0.0-alpha.2
 
 * Wait 30s after each death link before sending or receiving the next one.
