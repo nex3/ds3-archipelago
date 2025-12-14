@@ -52,12 +52,9 @@ pub struct Overlay {
     /// The current font scale for the overlay UI.
     font_scale: f32,
 
-    /// Whether to show the chat input line.
-    show_input: bool,
-
-    /// Whether to show the horizontal scrollbar in the log window when
-    /// content overflows.
-    show_horizontal_scrollbar: bool,
+    /// Whether compact mode is enabled. When enabled, hides the chat input
+    /// and horizontal scrollbar for a cleaner view.
+    is_compact_mode: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -78,8 +75,7 @@ impl Overlay {
             logs_emitted: 0,
             frames_since_new_logs: 0,
             font_scale: 1.8,
-            show_input: true,
-            show_horizontal_scrollbar: true,
+            is_compact_mode: false,
         })
     }
 
@@ -107,7 +103,7 @@ impl Overlay {
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
-                if self.show_input {
+                if !self.is_compact_mode {
                     self.render_say_input(ui);
                 }
                 self.render_url_popup(ui);
@@ -171,16 +167,9 @@ impl Overlay {
                     self.font_scale = (self.font_scale + 0.1).min(4.0);
                 }
 
-                ui.text("Show Chat Input");
+                ui.text("Compact Mode");
                 ui.same_line();
-                ui.checkbox("##show-input-checkbox", &mut self.show_input);
-
-                ui.text("Show Horizontal Scrollbar");
-                ui.same_line();
-                ui.checkbox(
-                    "##show-horizontal-scrollbar-checkbox",
-                    &mut self.show_horizontal_scrollbar,
-                );
+                ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
             });
         });
     }
@@ -206,7 +195,7 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
-        let input_height = if self.show_input {
+        let input_height = if !self.is_compact_mode {
             ui.frame_height_with_spacing().ceil()
         } else {
             0.0
@@ -216,7 +205,7 @@ impl Overlay {
             .size([0.0, -input_height])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(self.show_horizontal_scrollbar)
+            .horizontal_scrollbar(!self.is_compact_mode)
             .build(|| {
                 let logs = self.core.logs();
                 if logs.len() != self.logs_emitted {
