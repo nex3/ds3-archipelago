@@ -51,6 +51,9 @@ pub struct Overlay {
 
     /// The current font scale for the overlay UI.
     font_scale: f32,
+
+    /// Whether to show the chat input line.
+    show_input: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -71,6 +74,7 @@ impl Overlay {
             logs_emitted: 0,
             frames_since_new_logs: 0,
             font_scale: 1.8,
+            show_input: true,
         })
     }
 
@@ -98,7 +102,9 @@ impl Overlay {
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
-                self.render_say_input(ui);
+                if self.show_input {
+                    self.render_say_input(ui);
+                }
                 self.render_url_popup(ui);
                 self.render_settings_popup(ui);
             });
@@ -160,6 +166,10 @@ impl Overlay {
             if ui.button("+##font-size-increase-button") {
                 self.font_scale = (self.font_scale + 0.1).min(4.0);
             }
+
+            ui.text("Show Chat Input");
+            ui.same_line();
+            ui.checkbox("##show-input-checkbox", &mut self.show_input);
         });
     }
 
@@ -191,7 +201,11 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
-        let input_height = ui.frame_height_with_spacing().ceil();
+        let input_height = if self.show_input {
+            ui.frame_height_with_spacing().ceil()
+        } else {
+            0.0
+        };
 
         ui.child_window("#log")
             .size([0.0, -input_height])
