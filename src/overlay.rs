@@ -195,7 +195,7 @@ impl Overlay {
         ui.text("Connection status:");
         ui.same_line();
         match self.core.simple_connection_state() {
-            SimpleConnectionState::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
+            SimpleConnectionState::Connected => ui.text_colored(GREEN.to_rgba_f32s(), "Connected"),
             SimpleConnectionState::Connecting => ui.text("Connecting..."),
             SimpleConnectionState::Disconnected => {
                 ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
