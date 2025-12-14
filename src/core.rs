@@ -386,7 +386,7 @@ impl Core {
             for id in archipelago_item_ids {
                 let row = regulation_manager
                     .get_equip_param(id)
-                    .expect("no row defined for Archipelago ID");
+                    .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", id));
 
                 save_data.locations.insert(row.archipelago_location_id());
 

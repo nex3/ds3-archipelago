@@ -103,7 +103,13 @@ impl<T: ?Sized + EquipParam> EquipParamExt for T {
             Some((
                 (self.basic_price() as u32)
                     .try_into()
-                    .expect("invalid item ID found in synthetic item"),
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "invalid item ID {} found in synthetic item: {:?}",
+                            self.basic_price(),
+                            err
+                        )
+                    }),
                 self.sell_value() as u32,
             ))
         }

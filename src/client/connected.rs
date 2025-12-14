@@ -148,7 +148,9 @@ impl ConnectedClient {
                             .unwrap_or_else(|| panic!("Expected game data for {}", GAME_NAME))
                             .item_name_to_id
                             .get_by_right(&ap.item)
-                            .expect("Expected item ID to have a name")
+                            .unwrap_or_else(|| {
+                                panic!("Expected item ID {} to have a name", ap.item)
+                            })
                             .clone();
                         let location = self
                             .data_package
@@ -162,7 +164,12 @@ impl ConnectedClient {
                             .slot_data
                             .ap_ids_to_item_ids
                             .get(&id_key)
-                            .expect("Archipelago ID should have a DS3 ID defined in slot data");
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Archipelago ID {} should have a DS3 ID defined in slot data",
+                                    ap.item
+                                )
+                            });
                         let quantity = self
                             .connected
                             .slot_data
