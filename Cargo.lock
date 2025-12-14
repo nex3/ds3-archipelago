@@ -290,7 +290,7 @@ dependencies = [
 [[package]]
 name = "darksouls3"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#3d25aa339a17e4c05ebfdb4859ca2a31397f6483"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#5f95b744464b2cbd4ae020ebfeffd3afc2f562c9"
 dependencies = [
  "bitfield",
  "bitflags 2.10.0",
@@ -498,7 +498,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#3d25aa339a17e4c05ebfdb4859ca2a31397f6483"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#5f95b744464b2cbd4ae020ebfeffd3afc2f562c9"
 dependencies = [
  "from-singleton",
  "fromsoftware-shared-macros",
@@ -514,7 +514,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#3d25aa339a17e4c05ebfdb4859ca2a31397f6483"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#5f95b744464b2cbd4ae020ebfeffd3afc2f562c9"
 dependencies = [
  "proc-macro2",
  "quote",

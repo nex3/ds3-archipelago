@@ -5,6 +5,8 @@
 * Fix a bug where some items would have a synthetic copy appear in the inventory
   when purchased from shops.
 
+* Fix a crash when purchasing an upgraded weapon from a shop.
+
 * Clarify the error message for a config version mismatch.
 
 ### Linux/Proton
