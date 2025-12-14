@@ -89,11 +89,14 @@ impl Overlay {
             .build(|| {
                 ui.set_window_font_scale(1.8);
 
+                self.render_settings_button(ui);
+                ui.same_line();
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
                 self.render_say_input(ui);
                 self.render_url_popup(ui);
+                self.render_settings_popup(ui);
             });
 
         Ok(())
@@ -138,6 +141,19 @@ impl Overlay {
                     }
                 });
             });
+    }
+
+    /// Renders the modal popup which allows the user to change the overlay
+    /// settings.
+    fn render_settings_popup(&mut self, ui: &Ui) {
+        ui.popup("#settings-popup", || { });
+    }
+
+    /// Renders the settings button that opens the settings popup.
+    fn render_settings_button(&mut self, ui: &Ui) {
+        if ui.button("UI") {
+            ui.open_popup("#settings-popup");
+        }
     }
 
     /// Renders the widget that displays the current connection status and
