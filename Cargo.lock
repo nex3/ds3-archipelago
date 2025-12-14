@@ -411,6 +411,7 @@ dependencies = [
  "simplelog",
  "tokio",
  "windows 0.54.0",
+ "windows-result 0.4.1",
 ]
 
 [[package]]

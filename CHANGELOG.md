@@ -1,5 +1,7 @@
 ## 4.0.0-alpha.4
 
+* Properly locate the `apconfig.json` file on Linux.
+
 * Fix the path to the ME3 config file in the `launch-ds3.sh` script for Linux.
 
 * Clarify the error message for a config version mismatch.

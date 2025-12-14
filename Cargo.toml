@@ -27,11 +27,13 @@ pelite = "0.10"
 serde = { version = "1.0.228", features = ["derive"] }
 simplelog = "0.12.2"
 tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
+windows-result = "0.4.1"
 
 [dependencies.windows]
 version = "0.54"
 features = [
     "Win32_Foundation",
+    "Win32_System_ProcessStatus",
     "Win32_System_SystemServices",
     "Win32_UI_WindowsAndMessaging",
 ]
