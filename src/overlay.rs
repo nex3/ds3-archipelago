@@ -54,6 +54,10 @@ pub struct Overlay {
 
     /// Whether to show the chat input line.
     show_input: bool,
+
+    /// Whether to show the horizontal scrollbar in the log window when
+    /// content overflows.
+    show_horizontal_scrollbar: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -75,6 +79,7 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             show_input: true,
+            show_horizontal_scrollbar: true,
         })
     }
 
@@ -170,6 +175,10 @@ impl Overlay {
             ui.text("Show Chat Input");
             ui.same_line();
             ui.checkbox("##show-input-checkbox", &mut self.show_input);
+
+            ui.text("Show Horizontal Scrollbar");
+            ui.same_line();
+            ui.checkbox("##show-horizontal-scrollbar-checkbox", &mut self.show_horizontal_scrollbar);
         });
     }
 
@@ -211,7 +220,7 @@ impl Overlay {
             .size([0.0, -input_height])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(true)
+            .horizontal_scrollbar(self.show_horizontal_scrollbar)
             .build(|| {
                 let logs = self.core.logs();
                 if logs.len() != self.logs_emitted {
