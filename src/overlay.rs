@@ -99,11 +99,11 @@ impl Overlay {
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
             .position_pivot([1., 0.])
             .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
+            .menu_bar(true)
             .build(|| {
                 ui.set_window_font_scale(self.font_scale);
 
-                self.render_settings_button(ui);
-                ui.same_line();
+                self.render_menu_bar(ui);
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
@@ -111,7 +111,6 @@ impl Overlay {
                     self.render_say_input(ui);
                 }
                 self.render_url_popup(ui);
-                self.render_settings_popup(ui);
             });
 
         Ok(())
@@ -158,38 +157,32 @@ impl Overlay {
             });
     }
 
-    /// Renders the modal popup which allows the user to change the overlay
-    /// settings.
-    fn render_settings_popup(&mut self, ui: &Ui) {
-        ui.popup("#settings-popup", || {
-            ui.text("Font Size");
-            ui.same_line();
-            if ui.button("-##font-size-decrease-button") {
-                self.font_scale = (self.font_scale - 0.1).max(0.5);
-            }
-            ui.same_line();
-            if ui.button("+##font-size-increase-button") {
-                self.font_scale = (self.font_scale + 0.1).min(4.0);
-            }
+    /// Renders the menu bar with settings options.
+    fn render_menu_bar(&mut self, ui: &Ui) {
+        ui.menu_bar(|| {
+            ui.menu("Settings", || {
+                ui.text("Font Size");
+                ui.same_line();
+                if ui.button("-##font-size-decrease-button") {
+                    self.font_scale = (self.font_scale - 0.1).max(0.5);
+                }
+                ui.same_line();
+                if ui.button("+##font-size-increase-button") {
+                    self.font_scale = (self.font_scale + 0.1).min(4.0);
+                }
 
-            ui.text("Show Chat Input");
-            ui.same_line();
-            ui.checkbox("##show-input-checkbox", &mut self.show_input);
+                ui.text("Show Chat Input");
+                ui.same_line();
+                ui.checkbox("##show-input-checkbox", &mut self.show_input);
 
-            ui.text("Show Horizontal Scrollbar");
-            ui.same_line();
-            ui.checkbox(
-                "##show-horizontal-scrollbar-checkbox",
-                &mut self.show_horizontal_scrollbar,
-            );
+                ui.text("Show Horizontal Scrollbar");
+                ui.same_line();
+                ui.checkbox(
+                    "##show-horizontal-scrollbar-checkbox",
+                    &mut self.show_horizontal_scrollbar,
+                );
+            });
         });
-    }
-
-    /// Renders the settings button that opens the settings popup.
-    fn render_settings_button(&mut self, ui: &Ui) {
-        if ui.button("UI") {
-            ui.open_popup("#settings-popup");
-        }
     }
 
     /// Renders the widget that displays the current connection status and
