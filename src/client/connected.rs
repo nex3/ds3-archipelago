@@ -146,15 +146,15 @@ impl ConnectedClient {
                             .games
                             .get(GAME_NAME)
                             .unwrap_or_else(|| panic!("Expected game data for {}", GAME_NAME))
-                            .item_id_to_name()
-                            .get(&ap.item)
+                            .item_name_to_id
+                            .get_by_right(&ap.item)
                             .expect("Expected item ID to have a name")
                             .clone();
                         let location = self
                             .data_package
                             .games
                             .get(GAME_NAME)
-                            .and_then(|g| g.location_id_to_name().get(&ap.location))
+                            .and_then(|g| g.location_name_to_id.get_by_right(&ap.location))
                             .cloned();
                         let id_key = I64Key(ap.item);
                         let ds3_id = self

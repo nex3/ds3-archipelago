@@ -53,15 +53,16 @@ dependencies = [
 [[package]]
 name = "archipelago_rs"
 version = "0.2.0"
-source = "git+https://github.com/nex3/archipelago_rs?branch=rich-message#0b5aa5d1f218d405a5951068da0637e7950cd414"
+source = "git+https://github.com/nex3/archipelago_rs?branch=rich-message#12a9385fb9f0df8d863a64750e44352bc1cbbeca"
 dependencies = [
+ "bimap",
  "bitflags 2.10.0",
  "futures-util",
  "serde",
  "serde_json",
  "serde_repr",
  "serde_with",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
@@ -99,6 +100,15 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "bimap"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bincode"
