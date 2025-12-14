@@ -178,7 +178,10 @@ impl Overlay {
 
             ui.text("Show Horizontal Scrollbar");
             ui.same_line();
-            ui.checkbox("##show-horizontal-scrollbar-checkbox", &mut self.show_horizontal_scrollbar);
+            ui.checkbox(
+                "##show-horizontal-scrollbar-checkbox",
+                &mut self.show_horizontal_scrollbar,
+            );
         });
     }
 
@@ -265,7 +268,7 @@ impl Overlay {
             let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
             let style = ui.clone_style();
             let spacing = style.item_spacing[0] * self.font_scale * 0.7;
-            
+
             let input_width = ui.push_item_width(-(arrow_button_width + spacing));
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
