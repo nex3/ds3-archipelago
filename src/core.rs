@@ -1,11 +1,9 @@
-use std::any::Any;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use archipelago_rs::client::ArchipelagoError;
 use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
 use darksouls3::cs::*;
-use darksouls3::param::EQUIP_PARAM_GOODS_ST;
 use darksouls3::sprj::*;
 use fromsoftware_shared::{FromStatic, InstanceResult};
 use log::*;
@@ -395,8 +393,7 @@ impl Core {
             info!("  Archipelago location: {}", row.archipelago_location_id());
             save_data.locations.insert(row.archipelago_location_id());
 
-            if let Some(good) = (&row as &dyn Any).downcast_ref::<EQUIP_PARAM_GOODS_ST>()
-                && good.icon_id() == 7039
+            if let Some(good) = row.as_goods() && good.icon_id() == 7039
             {
                 info!("  Item is Path of the Dragon, granting gesture");
                 // If the player gets the synthetic Path of the Dragon item,
@@ -407,18 +404,25 @@ impl Core {
                     .main_player_game_data
                     .gesture_data
                     .set_gesture_acquired(29, true);
+                info!("  Removing from inventory");
+                game_data_man.remove_item(id, 1);
             } else if let Some((real_id, quantity)) = row.archipelago_item() {
                 info!("  Converting to {}x {:?}", quantity, real_id);
                 game_data_man.give_item_directly(real_id, quantity.try_into().unwrap());
+                info!("  Removing from inventory");
+                game_data_man.remove_item(id, 1);
             } else {
                 info!(
-                    "  Item has no Archipelago metadata. Basic price: {}, sell value: {}",
+                    "  Item has no Archipelago metadata. Basic price: {}, sell value: {}{}",
                     row.basic_price(),
-                    row.sell_value()
+                    row.sell_value(),
+                    if let Some(good) = row.as_goods() {
+                        format!(", icon id: {}", good.icon_id())
+                    } else { 
+                        "".into()
+                    }
                 );
             }
-            info!("  Removing from inventory");
-            game_data_man.remove_item(id, 1);
         }
 
         if let Connected(client) = self.connection.state_mut()

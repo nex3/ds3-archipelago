@@ -7,6 +7,9 @@
 
 * Fix a crash when purchasing an upgraded weapon from a shop.
 
+* Properly grant the Path of the Dragon gesture when it's received in the local
+  world.
+
 * Clarify the error message for a config version mismatch.
 
 ### Linux/Proton
