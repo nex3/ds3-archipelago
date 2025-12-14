@@ -372,40 +372,53 @@ impl Core {
             return;
         };
 
-        let archipelago_item_ids = game_data_man
+        // We have to make a separate vector here so we aren't borrowing while
+        // we make mutations.
+        let ids = game_data_man
             .main_player_game_data
             .equipment
             .equip_inventory_data
             .items_data
             .items()
-            .map(|entry| entry.item_id)
-            .filter(|id| id.is_archipelago())
+            .map(|e| e.item_id)
             .collect::<Vec<_>>();
-
-        if !archipelago_item_ids.is_empty() {
-            for id in archipelago_item_ids {
-                let row = regulation_manager
-                    .get_equip_param(id)
-                    .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", id));
-
-                save_data.locations.insert(row.archipelago_location_id());
-
-                if let Some(good) = (&row as &dyn Any).downcast_ref::<EQUIP_PARAM_GOODS_ST>()
-                    && good.icon_id() == 7039
-                {
-                    // If the player gets the synthetic Path of the Dragon item,
-                    // give them the gesture itself instead. Don't display an
-                    // item pop-up, because they already saw one when they got
-                    // the item.
-                    game_data_man
-                        .main_player_game_data
-                        .gesture_data
-                        .set_gesture_acquired(29, true);
-                } else if let Some((real_id, quantity)) = row.archipelago_item() {
-                    game_data_man.add_or_remove_item(real_id, quantity.try_into().unwrap());
-                }
-                game_data_man.add_or_remove_item(id, -1);
+        for id in ids {
+            if !id.is_archipelago() {
+                continue;
             }
+
+            info!("Inventory contains Archipelago item {:?}", id);
+            let row = regulation_manager
+                .get_equip_param(id)
+                .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", id));
+
+            info!("  Archipelago location: {}", row.archipelago_location_id());
+            save_data.locations.insert(row.archipelago_location_id());
+
+            if let Some(good) = (&row as &dyn Any).downcast_ref::<EQUIP_PARAM_GOODS_ST>()
+                && good.icon_id() == 7039
+            {
+                info!("  Item is Path of the Dragon, granting gesture");
+                // If the player gets the synthetic Path of the Dragon item,
+                // give them the gesture itself instead. Don't display an
+                // item pop-up, because they already saw one when they got
+                // the item.
+                game_data_man
+                    .main_player_game_data
+                    .gesture_data
+                    .set_gesture_acquired(29, true);
+            } else if let Some((real_id, quantity)) = row.archipelago_item() {
+                info!("  Converting to {}x {:?}", quantity, real_id);
+                game_data_man.give_item_directly(real_id, quantity.try_into().unwrap());
+            } else {
+                info!(
+                    "  Item has no Archipelago metadata. Basic price: {}, sell value: {}",
+                    row.basic_price(),
+                    row.sell_value()
+                );
+            }
+            info!("  Removing from inventory");
+            game_data_man.remove_item(id, 1);
         }
 
         if let Connected(client) = self.connection.state_mut()

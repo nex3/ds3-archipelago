@@ -2,6 +2,9 @@
 
 * Fix a bug where guaranteed enemy drops appear as placeholders when picked up.
 
+* Fix a bug where some items would have a synthetic copy appear in the inventory
+  when purchased from shops.
+
 * Clarify the error message for a config version mismatch.
 
 ### Linux/Proton
