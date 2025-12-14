@@ -1,10 +1,14 @@
 ## 4.0.0-alpha.4
 
+* Fix a bug where guaranteed enemy drops appear as placeholders when picked up.
+
+* Clarify the error message for a config version mismatch.
+
+### Linux/Proton
+
 * Properly locate the `apconfig.json` file on Linux.
 
 * Fix the path to the ME3 config file in the `launch-ds3.sh` script for Linux.
-
-* Clarify the error message for a config version mismatch.
 
 ## 4.0.0-alpha.3
 

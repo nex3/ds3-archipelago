@@ -3,6 +3,7 @@ use darksouls3::param::{EQUIP_PARAM_GOODS_ST, EquipParam};
 use darksouls3::sprj::{CategorizedItemID, ItemBuffer, ItemCategory, MAP_ITEM_MAN_GRANT_ITEM_VA};
 use fromsoftware_shared::FromStatic;
 use ilhook::x64::*;
+use log::*;
 
 use crate::save_data::SaveData;
 
@@ -11,12 +12,6 @@ use crate::save_data::SaveData;
 /// in-game.
 pub unsafe fn hook_items() {
     let callback = |reg: *mut Registers| {
-        // It's not clear what this number means, but the inner implementation
-        // is skipped if it's below 1 so we do the same.
-        if unsafe { *((*reg).r8 as *const i32) } < 1 {
-            return;
-        }
-
         let items = unsafe { &mut *((*reg).rdx as *mut ItemBuffer) };
         on_grant_items(items);
     };
@@ -37,6 +32,8 @@ pub unsafe fn hook_items() {
 /// make them pop up in a message on screen.
 fn on_grant_items(items: &mut ItemBuffer) {
     for item in items.iter_mut() {
+        info!("Received {}x {:?}", item.quantity, item.id);
+
         if item.id.category() != ItemCategory::Goods || item.id.uncategorized().value() <= 3780000 {
             // This is a vanilla item.
             continue;
@@ -47,6 +44,9 @@ fn on_grant_items(items: &mut ItemBuffer) {
             .expect("CSRegulationManager should be available in on_grant_items")
             .get_param::<EQUIP_PARAM_GOODS_ST>()[item.id.uncategorized().value().into()];
         if let Some((real_id, quantity)) = row.archipelago_item() {
+            info!("  Archipelago location: {}", row.archipelago_location_id());
+            info!("  Converting to {}x {:?}", quantity, real_id);
+
             if let Some(ref mut save_data) = SaveData::instance_mut() {
                 // Save data *should* always be loaded when the player gets an
                 // item, but there's no need to crash if it's not.
@@ -56,6 +56,12 @@ fn on_grant_items(items: &mut ItemBuffer) {
             item.id = real_id;
             item.quantity = quantity;
             item.durability = -1;
+        } else {
+            info!(
+                "  Item has no Archipelago metadata. Basic price: {}, sell value: {}",
+                row.basic_price(),
+                row.sell_value()
+            );
         }
     }
 }
