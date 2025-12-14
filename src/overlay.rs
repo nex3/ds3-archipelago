@@ -48,6 +48,9 @@ pub struct Overlay {
     /// The number of frames that have elapsed since new logs were last added.
     /// We use this to determine when to auto-scroll the log window.
     frames_since_new_logs: u64,
+
+    /// The current font scale for the overlay UI.
+    font_scale: f32,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -67,6 +70,7 @@ impl Overlay {
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
+            font_scale: 1.8,
         })
     }
 
@@ -87,7 +91,7 @@ impl Overlay {
             .position_pivot([1., 0.])
             .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
             .build(|| {
-                ui.set_window_font_scale(1.8);
+                ui.set_window_font_scale(self.font_scale);
 
                 self.render_settings_button(ui);
                 ui.same_line();
@@ -146,7 +150,17 @@ impl Overlay {
     /// Renders the modal popup which allows the user to change the overlay
     /// settings.
     fn render_settings_popup(&mut self, ui: &Ui) {
-        ui.popup("#settings-popup", || { });
+        ui.popup("#settings-popup", || {
+            ui.text("Font Size");
+            ui.same_line();
+            if ui.button("-##font-size-decrease-button") {
+                self.font_scale = (self.font_scale - 0.1).max(0.5);
+            }
+            ui.same_line();
+            if ui.button("+##font-size-increase-button") {
+                self.font_scale = (self.font_scale + 0.1).min(4.0);
+            }
+        });
     }
 
     /// Renders the settings button that opens the settings popup.
@@ -177,8 +191,10 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
+        let input_height = ui.frame_height_with_spacing().ceil();
+
         ui.child_window("#log")
-            .size([0.0, -33.])
+            .size([0.0, -input_height])
             .draw_background(false)
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(true)
@@ -223,17 +239,19 @@ impl Overlay {
     /// Renders the text box in which users can write chats to the server.
     fn render_say_input(&mut self, ui: &Ui) {
         ui.disabled(self.core.client().is_none(), || {
-            let width = ui.push_item_width(-40.);
+            let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
+            let style = ui.clone_style();
+            let spacing = style.item_spacing[0] * self.font_scale * 0.7;
+            
+            let input_width = ui.push_item_width(-(arrow_button_width + spacing));
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
                 .enter_returns_true(true)
                 .build();
-            drop(width);
+            drop(input_width);
 
-            ui.same_line();
-            let width = ui.push_item_width(30.);
+            ui.same_line_with_spacing(0.0, spacing);
             send = ui.arrow_button("##say-button", Direction::Right) || send;
-            drop(width);
 
             if send && let Some(client) = self.core.client() {
                 client.say(&self.say_input);
