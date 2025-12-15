@@ -1,3 +1,7 @@
+## 4.0.0-alpha.5
+
+* Fix a rare crash when obtaining weapons and/or armor.
+
 ## 4.0.0-alpha.4
 
 * Fix a bug where guaranteed enemy drops appear as placeholders when picked up.
