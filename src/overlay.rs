@@ -157,21 +157,25 @@ impl Overlay {
     fn render_menu_bar(&mut self, ui: &Ui) {
         ui.menu_bar(|| {
             ui.menu("Settings", || {
-                ui.text("Font Size");
-                ui.same_line();
-                if ui.button("-##font-size-decrease-button") {
-                    self.font_scale = (self.font_scale - 0.1).max(0.5);
-                }
-                ui.same_line();
-                if ui.button("+##font-size-increase-button") {
-                    self.font_scale = (self.font_scale + 0.1).min(4.0);
-                }
-
-                ui.text("Compact Mode");
-                ui.same_line();
-                ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
+                self.render_settings_menu(ui);
             });
         });
+    }
+
+    fn render_settings_menu(&mut self, ui: &Ui) {
+        ui.text("Font Size");
+        ui.same_line();
+        if ui.button("-##font-size-decrease-button") {
+            self.font_scale = (self.font_scale - 0.1).max(0.5);
+        }
+        ui.same_line();
+        if ui.button("+##font-size-increase-button") {
+            self.font_scale = (self.font_scale + 0.1).min(4.0);
+        }
+
+        ui.text("Compact Mode");
+        ui.same_line();
+        ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
     }
 
     /// Renders the widget that displays the current connection status and
