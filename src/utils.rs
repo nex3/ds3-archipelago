@@ -6,7 +6,7 @@ use anyhow::{Context, Error, Result};
 use imgui::*;
 use mint::Vector2;
 use windows::Win32::Foundation::{ERROR_INSUFFICIENT_BUFFER, HMODULE, MAX_PATH};
-use windows::Win32::System::ProcessStatus::{ENUM_PROCESS_MODULES_EX_FLAGS, EnumProcessModulesEx};
+use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, ENUM_PROCESS_MODULES_EX_FLAGS};
 use windows::Win32::System::{LibraryLoader::GetModuleFileNameW, Threading::GetCurrentProcess};
 use windows_result::Error as WindowsError;
 
@@ -29,6 +29,7 @@ pub fn mod_directory<'a>() -> Result<&'a Path> {
 
 /// Loads [mod_directory] without caching.
 fn load_mod_directory() -> Result<PathBuf> {
+    println!("Locating mod directory...");
     match try_load_mod_directory(0x100) {
         Ok(TryLoadModDirectoryResult::Path(path)) => Ok(path),
         Ok(TryLoadModDirectoryResult::TryAgain(size)) => match try_load_mod_directory(size) {
@@ -64,19 +65,30 @@ fn try_load_mod_directory(size: u32) -> Result<TryLoadModDirectoryResult> {
     }
 
     let modules_needed = bytes_needed / module_size;
+    println!("  Found {} loaded DLLs", modules_needed);
 
-    for module in &modules[..cmp::min(modules_needed, size) as usize] {
+    let modules = &modules[..cmp::min(modules_needed, size) as usize];
+    for module in modules {
         let mut path = get_module_path(unsafe { module.assume_init() })?;
         if path.file_name().and_then(|op| op.to_str()) == Some("me3_mod_host.dll") {
+            println!("  Found ME3 DLL: {:?}", path);
             path.pop();
             path.pop();
+            println!("  Mod path: {:?}", path);
             return Ok(TryLoadModDirectoryResult::Path(path));
         }
     }
 
     if modules_needed > size {
+        println!("  There are more DLLs to check, retrying");
         Ok(TryLoadModDirectoryResult::TryAgain(modules_needed))
     } else {
+        println!(
+            "  All loaded DLLs: {:?}",
+            modules
+                .iter()
+                .map(|m| get_module_path(unsafe { m.assume_init() }))
+        );
         Err(Error::msg("me3_mod_host.dll isn't loaded in this process"))
     }
 }

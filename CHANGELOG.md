@@ -2,6 +2,9 @@
 
 * Fix a rare crash when obtaining weapons and/or armor.
 
+* Don't produce a bogus seed conflict error when loading a save, leaving it,
+  connecting, then starting a new file.
+
 ## 4.0.0-alpha.4
 
 * Fix a bug where guaranteed enemy drops appear as placeholders when picked up.

@@ -61,9 +61,12 @@ impl SaveData {
                     SavedData(bytes) => bytes,
                     MainMenu => {
                         // If the player goes back to the main menu, reset the
-                        // granted items so that if the user starts a new file
-                        // they get all new items.
-                        INSTANCE.write().unwrap().items_granted = 0;
+                        // granted items and seed info so that if the user
+                        // starts a new file they get all new items and no seed
+                        // conflict.
+                        let mut save = INSTANCE.write().unwrap();
+                        save.items_granted = 0;
+                        save.seed = None;
                         return;
                     }
                     _ => return,
