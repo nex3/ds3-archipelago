@@ -205,10 +205,14 @@ impl Overlay {
         ui.text("Connection status:");
         ui.same_line();
         match self.core.simple_connection_state() {
-            SimpleConnectionState::Connected => ui.text_colored(GREEN.to_rgba_f32s(), "Connected"),
-            SimpleConnectionState::Connecting => ui.text("Connecting..."),
+            SimpleConnectionState::Connected => {
+                bold_text_colored(ui, "Connected", GREEN.to_rgba_f32s());
+            }
+            SimpleConnectionState::Connecting => {
+                bold_text_colored(ui, "Connecting...", BLUE.to_rgba_f32s());
+            }
             SimpleConnectionState::Disconnected => {
-                ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
+                bold_text_colored(ui, "Disconnected", RED.to_rgba_f32s());
                 ui.same_line();
                 if ui.button("Change URL") {
                     ui.open_popup("#url-popup");
@@ -340,5 +344,14 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
             _ => WHITE,
         };
         ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), part.to_string());
+    }
+}
+
+/// Renders bold colored text by drawing it multiple times with 1px offset.
+fn bold_text_colored(ui: &Ui, text: &str, color: [f32; 4]) {
+    let pos = ui.cursor_pos();
+    for i in 0..3 {
+        ui.set_cursor_pos([pos[0] + i as f32, pos[1]]);
+        ui.text_colored(color, text);
     }
 }
