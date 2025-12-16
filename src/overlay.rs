@@ -55,6 +55,9 @@ pub struct Overlay {
     /// Whether compact mode is enabled. When enabled, hides the chat input
     /// and horizontal scrollbar for a cleaner view.
     is_compact_mode: bool,
+
+    /// The background opacity for the overlay UI.
+    background_opacity: f32,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -76,6 +79,7 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             is_compact_mode: false,
+            background_opacity: 0.8,
         })
     }
 
@@ -90,6 +94,10 @@ impl Overlay {
         let Some(viewport_size) = self.viewport_size else {
             return Ok(());
         };
+
+        let bg_color = [0.0, 0.0, 0.0, self.background_opacity];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
+        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
 
         ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
@@ -108,6 +116,9 @@ impl Overlay {
                 }
                 self.render_url_popup(ui);
             });
+
+        drop(_bg);
+        drop(_menu_bg);
 
         Ok(())
     }
@@ -176,6 +187,16 @@ impl Overlay {
         ui.text("Compact Mode");
         ui.same_line();
         ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
+
+        ui.text("Background Opacity");
+        ui.same_line();
+        if ui.button("-##bg-opacity-decrease-button") {
+            self.background_opacity = (self.background_opacity - 0.1).max(0.0);
+        }
+        ui.same_line();
+        if ui.button("+##bg-opacity-increase-button") {
+            self.background_opacity = (self.background_opacity + 0.1).min(1.0);
+        }
     }
 
     /// Renders the widget that displays the current connection status and
@@ -199,6 +220,11 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
+        let is_focused =
+            ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+        let scroll_bg_color = [0.0, 0.0, 0.0, if is_focused { 1.0 } else { 0.0 }];
+        let _scroll_bg = ui.push_style_color(StyleColor::ScrollbarBg, scroll_bg_color);
+
         let input_height = if !self.is_compact_mode {
             ui.frame_height_with_spacing().ceil()
         } else {
@@ -246,6 +272,8 @@ impl Overlay {
                 }
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
+
+        drop(_scroll_bg);
     }
 
     /// Renders the text box in which users can write chats to the server.
