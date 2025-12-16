@@ -55,10 +55,6 @@ pub struct Overlay {
     /// Whether compact mode is enabled. When enabled, hides the chat input
     /// and horizontal scrollbar for a cleaner view.
     is_compact_mode: bool,
-
-    /// Flag to open the URL popup after menu closes. Necessary to avoid ID
-    /// stack issues.
-    open_url_popup: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -80,7 +76,6 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             is_compact_mode: false,
-            open_url_popup: false,
         })
     }
 
@@ -105,10 +100,8 @@ impl Overlay {
                 ui.set_window_font_scale(self.font_scale);
 
                 self.render_menu_bar(ui);
-                if self.open_url_popup {
-                    self.open_url_popup = false;
-                    ui.open_popup("#url-popup");
-                }
+                self.render_connection_widget(ui);
+                ui.separator();
                 self.render_log_window(ui);
                 if !self.is_compact_mode {
                     self.render_say_input(ui);
@@ -160,23 +153,12 @@ impl Overlay {
             });
     }
 
-    /// Renders the menu bar with settings options and connection status.
+    /// Renders the menu bar with settings options.
     fn render_menu_bar(&mut self, ui: &Ui) {
         ui.menu_bar(|| {
             ui.menu("Settings", || {
                 self.render_settings_menu(ui);
             });
-
-            let status_color = match self.core.simple_connection_state() {
-                SimpleConnectionState::Connected => GREEN,
-                SimpleConnectionState::Connecting => WHITE,
-                SimpleConnectionState::Disconnected => RED,
-            };
-            let color = ui.push_style_color(StyleColor::Text, status_color.to_rgba_f32s());
-            ui.menu("Connection", || {
-                self.render_connection_menu(ui);
-            });
-            drop(color);
         });
     }
 
@@ -196,21 +178,21 @@ impl Overlay {
         ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
     }
 
-    /// Renders the menu that displays the current connection status and
+    /// Renders the widget that displays the current connection status and
     /// allows the player to reconnect to Archipelago.
-    fn render_connection_menu(&mut self, ui: &Ui) {
+    fn render_connection_widget(&mut self, ui: &Ui) {
+        ui.text("Connection status:");
+        ui.same_line();
         match self.core.simple_connection_state() {
-            SimpleConnectionState::Connected => ui.text("Connected"),
+            SimpleConnectionState::Connected => ui.text_colored(GREEN.to_rgba_f32s(), "Connected"),
             SimpleConnectionState::Connecting => ui.text("Connecting..."),
             SimpleConnectionState::Disconnected => {
-                ui.text("Disconnected");
+                ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
                 ui.same_line();
-                let color = ui.push_style_color(StyleColor::Text, WHITE.to_rgba_f32s());
                 if ui.button("Change URL") {
-                    self.open_url_popup = true;
+                    ui.open_popup("#url-popup");
                     self.core.config().url().clone_into(&mut self.popup_url);
                 }
-                drop(color);
             }
         }
     }
