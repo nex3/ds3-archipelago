@@ -404,16 +404,15 @@ impl Core {
                     .main_player_game_data
                     .gesture_data
                     .set_gesture_acquired(29, true);
-                info!("  Removing from inventory");
-                game_data_man.remove_item(id, 1);
             } else if let Some((real_id, quantity)) = row.archipelago_item() {
                 info!("  Converting to {}x {:?}", quantity, real_id);
                 game_data_man.give_item_directly(real_id, quantity.try_into().unwrap());
-                info!("  Removing from inventory");
-                game_data_man.remove_item(id, 1);
             } else {
+                // Presumably any item without local item data is a foreign
+                // item, but we'll log a bunch of extra data in case there's a
+                // bug we need to track down.
                 info!(
-                    "  Item has no Archipelago metadata. Basic price: {}, sell value: {}{}",
+                    "  Item has no local item data. Basic price: {}, sell value: {}{}",
                     row.basic_price(),
                     row.sell_value(),
                     if let Some(good) = row.as_goods() {
@@ -423,6 +422,8 @@ impl Core {
                     }
                 );
             }
+            info!("  Removing from inventory");
+            game_data_man.remove_item(id, 1);
         }
 
         if let Connected(client) = self.connection.state_mut()
