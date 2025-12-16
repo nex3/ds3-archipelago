@@ -7,6 +7,8 @@
 
 * Properly remove foreign items from the inventory after distributing them.
 
+* Don't die because of our own death links.
+
 ## 4.0.0-alpha.4
 
 * Fix a bug where guaranteed enemy drops appear as placeholders when picked up.

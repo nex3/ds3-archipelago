@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Result, bail};
 use archipelago_rs::client::ArchipelagoError;
@@ -438,20 +438,33 @@ impl Core {
     /// Kills the player after a death link is received and sends a death link
     /// when the player dies.
     pub fn handle_death_link(&mut self) {
-        if self.last_death_link.elapsed() < DEATH_LINK_GRACE_PERIOD {
-            return;
-        }
         let Connected(client) = self.connection.state_mut() else {
-            return;
-        };
-        let Ok(player) = (unsafe { PlayerIns::instance() }) else {
             return;
         };
         if !client.connected().slot_data.options.death_link {
             return;
         }
 
-        if client.death_link().is_some() {
+        // Consume the death link even if we ignore it.
+        let death_link = client.death_link();
+        let death_link = death_link.as_ref();
+        // Ignore the death link and avoid sending out a new death notification
+        // if we've experienced one recently by our own reckoning of time...
+        if self.last_death_link.elapsed() < DEATH_LINK_GRACE_PERIOD ||
+            // ...or if the stated time on the death link is within the last
+            // grace period.
+            death_link
+                .and_then(|dl| SystemTime::now().duration_since(dl.time).ok())
+                .is_some_and(|dur| dur < DEATH_LINK_GRACE_PERIOD)
+        {
+            return;
+        }
+        let Ok(player) = (unsafe { PlayerIns::instance() }) else {
+            return;
+        };
+
+        // Always ignore death links that we sent.
+        if death_link.is_some_and(|dl| dl.source != client.room_info().seed_name) {
             player.kill();
             self.last_death_link = Instant::now();
         } else if player.super_chr_ins.modules.data.hp == 0 {
