@@ -9,6 +9,8 @@
 
 * Don't die because of our own death links.
 
+* Put logs in a `log/` directory rather than the root of the mod directory.
+
 ## 4.0.0-alpha.4
 
 * Fix a bug where guaranteed enemy drops appear as placeholders when picked up.

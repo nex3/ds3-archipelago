@@ -117,9 +117,9 @@ fn start_logger(dir: impl AsRef<Path>) -> Result<()> {
 
 /// Creates a write logger that writes to files in [dir].
 fn create_write_logger(dir: impl AsRef<Path>) -> Result<Box<WriteLogger<fs::File>>> {
-    let dir_ref = dir.as_ref();
-    fs::create_dir_all(dir_ref)?;
-    let filename = dir_ref.join(Local::now().format("archipelago-%Y-%m-%d.log").to_string());
+    let dir = dir.as_ref().join("log");
+    fs::create_dir_all(&dir)?;
+    let filename = dir.join(Local::now().format("archipelago-%Y-%m-%d.log").to_string());
     Ok(WriteLogger::new(
         LevelFilter::Info,
         simplelog::Config::default(),
