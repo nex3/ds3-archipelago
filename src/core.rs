@@ -393,7 +393,8 @@ impl Core {
             info!("  Archipelago location: {}", row.archipelago_location_id());
             save_data.locations.insert(row.archipelago_location_id());
 
-            if let Some(good) = row.as_goods() && good.icon_id() == 7039
+            if let Some(good) = row.as_goods()
+                && good.icon_id() == 7039
             {
                 info!("  Item is Path of the Dragon, granting gesture");
                 // If the player gets the synthetic Path of the Dragon item,
@@ -417,7 +418,7 @@ impl Core {
                     row.sell_value(),
                     if let Some(good) = row.as_goods() {
                         format!(", icon id: {}", good.icon_id())
-                    } else { 
+                    } else {
                         "".into()
                     }
                 );

@@ -6,7 +6,7 @@ use anyhow::{Context, Error, Result};
 use imgui::*;
 use mint::Vector2;
 use windows::Win32::Foundation::{ERROR_INSUFFICIENT_BUFFER, HMODULE, MAX_PATH};
-use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, ENUM_PROCESS_MODULES_EX_FLAGS};
+use windows::Win32::System::ProcessStatus::{ENUM_PROCESS_MODULES_EX_FLAGS, EnumProcessModulesEx};
 use windows::Win32::System::{LibraryLoader::GetModuleFileNameW, Threading::GetCurrentProcess};
 use windows_result::Error as WindowsError;
 
