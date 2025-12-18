@@ -226,8 +226,8 @@ impl Overlay {
     fn render_log_window(&mut self, ui: &Ui) {
         let is_focused =
             ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-        let scroll_bg_color = [0.0, 0.0, 0.0, if is_focused { 1.0 } else { 0.0 }];
-        let _scroll_bg = ui.push_style_color(StyleColor::ScrollbarBg, scroll_bg_color);
+        let scrollbar_bg_color = [0.0, 0.0, 0.0, if is_focused { 1.0 } else { 0.0 }];
+        let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
         let input_height = if !self.is_compact_mode {
             ui.frame_height_with_spacing().ceil()
@@ -277,7 +277,7 @@ impl Overlay {
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
 
-        drop(_scroll_bg);
+        drop(_scrollbar_bg);
     }
 
     /// Renders the text box in which users can write chats to the server.
