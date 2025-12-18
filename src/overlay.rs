@@ -348,6 +348,7 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
 }
 
 /// Renders bold colored text by drawing it multiple times with 1px offset.
+/// TODO: Use ImGui font loading to support proper bold rendering.
 fn bold_text_colored(ui: &Ui, text: &str, color: [f32; 4]) {
     let pos = ui.cursor_pos();
     for i in 0..3 {
