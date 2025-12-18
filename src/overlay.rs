@@ -206,10 +206,10 @@ impl Overlay {
         ui.same_line();
         match self.core.simple_connection_state() {
             SimpleConnectionState::Connected => {
-                bold_text_colored(ui, "Connected", GREEN.to_rgba_f32s());
+                ui.text_colored(GREEN.to_rgba_f32s(), "Connected");
             }
             SimpleConnectionState::Connecting => {
-                bold_text_colored(ui, "Connecting...", BLUE.to_rgba_f32s());
+                ui.text_colored(BLUE.to_rgba_f32s(), "Connecting...");
             }
             SimpleConnectionState::Disconnected => {
                 bold_text_colored(ui, "Disconnected", RED.to_rgba_f32s());
