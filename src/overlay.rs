@@ -114,7 +114,7 @@ impl Overlay {
                 if !self.is_compact_mode {
                     self.render_say_input(ui);
                 }
-                self.render_url_popup(ui);
+                self.render_url_modal_popup(ui);
             });
 
         drop(_bg);
@@ -138,8 +138,8 @@ impl Overlay {
 
     /// Renders the modal popup which queries the player for connection
     /// information.
-    fn render_url_popup(&mut self, ui: &Ui) {
-        ui.modal_popup_config("#url-popup")
+    fn render_url_modal_popup(&mut self, ui: &Ui) {
+        ui.modal_popup_config("#url-modal-popup")
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
@@ -216,7 +216,7 @@ impl Overlay {
                 bold_text_colored(ui, "Disconnected", RED.to_rgba_f32s());
                 ui.same_line();
                 if ui.button("Change URL") {
-                    ui.open_popup("#url-popup");
+                    ui.open_popup("#url-modal-popup");
                     self.core.config().url().clone_into(&mut self.popup_url);
                 }
             }
