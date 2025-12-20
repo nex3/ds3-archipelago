@@ -1,6 +1,7 @@
 use archipelago_rs::protocol::{RichMessageColor, RichMessagePart, RichPrint};
 use hudhook::RenderContext;
 use imgui::*;
+use imgui_sys::ImVec2;
 use log::*;
 
 use anyhow::Result;
@@ -190,6 +191,18 @@ impl Overlay {
         if self.was_unfocused_window_opacity_button_clicked {
             ui.open_popup("#unfocused-window-opacity-popup");
             self.was_unfocused_window_opacity_button_clicked = false;
+
+            if let Some(viewport_size) = self.viewport_size {
+                let center_x = viewport_size[0] / 2.0;
+                let center_y = viewport_size[1] / 2.0;
+                unsafe {
+                    sys::igSetNextWindowPos(
+                        ImVec2::new(center_x, center_y),
+                        Condition::Appearing as i32,
+                        ImVec2::new(0.5, 0.5),
+                    );
+                }
+            }
         }
 
         ui.popup("#unfocused-window-opacity-popup", || {
