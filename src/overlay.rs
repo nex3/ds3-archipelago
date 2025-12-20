@@ -56,8 +56,16 @@ pub struct Overlay {
     /// and horizontal scrollbar for a cleaner view.
     is_compact_mode: bool,
 
-    /// The background opacity for the overlay UI.
-    background_opacity: f32,
+    /// The unfocused window opacity for the overlay UI.
+    unfocused_window_opacity: f32,
+
+    /// Whether the overlay window was focused in the previous frame.
+    is_window_focused: bool,
+
+    /// Whether the unfocused window opacity button in the view menu was
+    /// clicked. Necessary to close the menu, so the opacity can be
+    /// adjusted without the menu overlapping the window.
+    was_unfocused_window_opacity_button_clicked: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -79,7 +87,9 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             is_compact_mode: false,
-            background_opacity: 0.8,
+            unfocused_window_opacity: 0.8,
+            is_window_focused: false,
+            was_unfocused_window_opacity_button_clicked: false,
         })
     }
 
@@ -95,9 +105,16 @@ impl Overlay {
             return Ok(());
         };
 
-        let bg_color = [0.0, 0.0, 0.0, self.background_opacity];
+        let window_opacity = if self.is_window_focused {
+            1.0
+        } else {
+            self.unfocused_window_opacity
+        };
+        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
         let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
         let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
+        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
+        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
 
         ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
@@ -105,8 +122,12 @@ impl Overlay {
             .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
             .menu_bar(true)
             .build(|| {
+                self.is_window_focused =
+                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+
                 ui.set_window_font_scale(self.font_scale);
 
+                self.render_unfocused_window_opacity_popup(ui);
                 self.render_menu_bar(ui);
                 self.render_connection_widget(ui);
                 ui.separator();
@@ -164,6 +185,31 @@ impl Overlay {
             });
     }
 
+    /// Renders the popup which allows the user to set the unfocused window opacity.
+    fn render_unfocused_window_opacity_popup(&mut self, ui: &Ui) {
+        if self.was_unfocused_window_opacity_button_clicked {
+            ui.open_popup("#unfocused-window-opacity-popup");
+            self.was_unfocused_window_opacity_button_clicked = false;
+        }
+
+        ui.popup("#unfocused-window-opacity-popup", || {
+            // Force unfocused state while setting opacity to give immediate feedback.
+            self.is_window_focused = false;
+
+            let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
+            let _slider_width = ui.push_item_width(150. * self.font_scale);
+            ui.slider_config("Window Opacity (Unfocused)", 0, 100)
+                .display_format("%d%%")
+                .build(&mut opacity_percent);
+            drop(_slider_width);
+            self.unfocused_window_opacity = (opacity_percent as f32) / 100.0;
+
+            if ui.button("Close") {
+                ui.close_current_popup();
+            }
+        });
+    }
+
     /// Renders the menu bar.
     fn render_menu_bar(&mut self, ui: &Ui) {
         ui.menu_bar(|| {
@@ -189,14 +235,11 @@ impl Overlay {
         ui.same_line();
         ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
 
-        ui.text("Background Opacity");
+        ui.text("Window Opacity (Unfocused)");
         ui.same_line();
-        if ui.button("-##bg-opacity-decrease-button") {
-            self.background_opacity = (self.background_opacity - 0.1).max(0.0);
-        }
-        ui.same_line();
-        if ui.button("+##bg-opacity-increase-button") {
-            self.background_opacity = (self.background_opacity + 0.1).min(1.0);
+        if ui.button("Change##unfocused-window-opacity-button") {
+            ui.close_current_popup();
+            self.was_unfocused_window_opacity_button_clicked = true;
         }
     }
 
