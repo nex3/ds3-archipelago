@@ -7,7 +7,6 @@ use log::*;
 use anyhow::Result;
 
 use crate::core::{Core, SimpleConnectionState};
-use crate::utils::PopupModalExt;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -165,10 +164,11 @@ impl Overlay {
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .size([600., 0.], Condition::FirstUseEver)
+            .always_auto_resize(true)
+            .always_use_window_padding(true)
             .build(|| {
                 {
-                    let _ = ui.push_item_width(600.);
+                    let _ = ui.push_item_width(500. * self.font_scale);
                     ui.input_text("Room URL", &mut self.popup_url)
                         .hint("archipelago.gg:12345")
                         .chars_noblank(true)
