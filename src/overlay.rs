@@ -164,16 +164,17 @@ impl Overlay {
             });
     }
 
-    /// Renders the menu bar with settings options.
+    /// Renders the menu bar.
     fn render_menu_bar(&mut self, ui: &Ui) {
         ui.menu_bar(|| {
-            ui.menu("Settings", || {
-                self.render_settings_menu(ui);
+            ui.menu("View", || {
+                self.render_view_menu(ui);
             });
         });
     }
 
-    fn render_settings_menu(&mut self, ui: &Ui) {
+    /// Renders the view menu.
+    fn render_view_menu(&mut self, ui: &Ui) {
         ui.text("Font Size");
         ui.same_line();
         if ui.button("-##font-size-decrease-button") {
@@ -224,9 +225,8 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
-        let is_focused =
-            ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-        let scrollbar_bg_color = [0.0, 0.0, 0.0, if is_focused { 1.0 } else { 0.0 }];
+        let scrollbar_bg_opacity = if self.is_window_focused { 1.0 } else { 0.0 };
+        let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
         let input_height = if !self.is_compact_mode {
