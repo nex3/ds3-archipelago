@@ -25,7 +25,7 @@ const CONFIG: bincode::config::Configuration = bincode::config::standard();
 pub struct SaveData {
     /// The number of Archipelago items that have been granted to this player
     /// from foreign games throughout the course of this run.
-    pub items_granted: u64,
+    pub items_granted: usize,
 
     /// The set of Archipelago locations that this player has accessed so far in
     /// this game. We don't strictly need to track this, but it helps us avoid

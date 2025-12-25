@@ -1,12 +1,13 @@
-use archipelago_rs::protocol::{RichMessageColor, RichMessagePart, RichPrint};
+use std::mem;
+
+use archipelago_rs::{self as ap, RichText, TextColor};
 use hudhook::RenderContext;
 use imgui::*;
 use log::*;
 
 use anyhow::Result;
 
-use crate::core::{Core, SimpleConnectionState};
-use crate::utils::PopupModalExt;
+use crate::{core::Core, utils::PopupModalExt};
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -145,10 +146,10 @@ impl Overlay {
     fn render_connection_widget(&mut self, ui: &Ui) {
         ui.text("Connection status:");
         ui.same_line();
-        match self.core.simple_connection_state() {
-            SimpleConnectionState::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
-            SimpleConnectionState::Connecting => ui.text("Connecting..."),
-            SimpleConnectionState::Disconnected => {
+        match self.core.connection_state_type() {
+            ap::ConnectionStateType::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
+            ap::ConnectionStateType::Connecting => ui.text("Connecting..."),
+            ap::ConnectionStateType::Disconnected => {
                 ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
                 ui.same_line();
                 if ui.button("Change URL") {
@@ -174,7 +175,7 @@ impl Overlay {
                 }
 
                 for message in logs {
-                    use RichPrint::*;
+                    use ap::Print::*;
                     write_message_data(
                         ui,
                         message.data(),
@@ -186,10 +187,9 @@ impl Overlay {
                             | CommandResult { .. }
                             | AdminCommandResult { .. }
                             | Unknown { .. } => 0xff,
-                            ItemSend { receiving, .. }
-                            | ItemCheat { receiving, .. }
-                            | Hint { receiving, .. }
-                                if self.core.slot().is_some_and(|s| *receiving == s) =>
+                            ItemSend { item, .. } | ItemCheat { item, .. } | Hint { item, .. }
+                                if self.core.config().slot() == item.receiver().name()
+                                    || self.core.config().slot() == item.sender().name() =>
                             {
                                 0xFF
                             }
@@ -219,9 +219,10 @@ impl Overlay {
             send = ui.arrow_button("##say-button", Direction::Right) || send;
             drop(width);
 
-            if send && let Some(client) = self.core.client() {
-                client.say(&self.say_input);
-                self.say_input.clear();
+            if send && let Some(client) = self.core.client_mut() {
+                // We don't have a great way to surface these errors, and
+                // they're non-fatal, so just ignore them.
+                let _ = client.say(mem::take(&mut self.say_input));
             }
         });
     }
@@ -239,7 +240,7 @@ impl ImColor32Ext for ImColor32 {
 }
 
 /// Writes the text in [parts] to [ui] in a single line.
-fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
+fn write_message_data(ui: &Ui, parts: &[RichText], alpha: u8) {
     let mut first = true;
     for part in parts {
         if !first {
@@ -250,15 +251,12 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
         // TODO: Load in fonts to support bold, maybe write a line manually for
         // underline? I'm not sure there's a reasonable way to support
         // background colors.
-        use RichMessageColor::*;
-        use RichMessagePart::*;
+        use RichText::*;
+        use TextColor::*;
         let color = match part {
-            PlayerId { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
-            ItemId { .. } | ItemName { .. } | Color { color: Magenta, .. } => MAGENTA,
-            LocationId { .. }
-            | LocationName { .. }
-            | EntranceName { .. }
-            | Color { color: Cyan, .. } => CYAN,
+            Player { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
+            Item { .. } | Color { color: Magenta, .. } => MAGENTA,
+            Location { .. } | EntranceName { .. } | Color { color: Cyan, .. } => CYAN,
             Color { color: Black, .. } => BLACK,
             Color { color: Red, .. } => RED,
             Color { color: Green, .. } => GREEN,

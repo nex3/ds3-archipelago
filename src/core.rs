@@ -1,17 +1,16 @@
 use std::time::{Duration, Instant, SystemTime};
+use std::{io, mem};
 
 use anyhow::{Result, bail};
-use archipelago_rs::client::ArchipelagoError;
-use archipelago_rs::protocol::{ItemsHandlingFlags, RichPrint};
+use archipelago_rs as ap;
 use darksouls3::cs::*;
 use darksouls3::sprj::*;
 use fromsoftware_shared::{FromStatic, InstanceResult};
 use log::*;
 
-use crate::client::{ClientConnectionState::*, *};
-use crate::config::Config;
 use crate::item::{CategorizedItemIDExt, EquipParamExt};
-use crate::save_data::*;
+use crate::slot_data::{I64Key, SlotData};
+use crate::{config::Config, save_data::*};
 
 /// The core of the Archipelago mod. This is responsible for running the
 /// non-UI-related game logic and interacting with the Archieplago client.
@@ -23,10 +22,15 @@ pub struct Core {
     config: Config,
 
     /// The log of prints displayed in the overlay.
-    log_buffer: Vec<RichPrint>,
+    log_buffer: Vec<ap::Print>,
 
     /// The Archipelago client connection.
-    connection: ClientConnection,
+    connection: ap::Connection<SlotData>,
+
+    /// Events we're waiting to process until the player loads a save. This is
+    /// always empty unless a connection is connected and the player is on the
+    /// main menu (or in the initial waiting period during a load).
+    event_buffer: Vec<ap::Event>,
 
     /// The time we last granted an item to the player. Used to ensure we don't
     /// give more than one item per second.
@@ -70,6 +74,7 @@ impl Core {
         Ok(Self {
             config,
             connection,
+            event_buffer: vec![],
             log_buffer: vec![],
             last_item_time: Instant::now(),
             load_time: None,
@@ -80,23 +85,23 @@ impl Core {
     }
 
     /// Creates a new [ClientConnection] based on the connection information in [config].
-    fn new_connection(config: &Config) -> ClientConnection {
-        ClientConnection::new(
-            config.url(),
-            config.slot(),
-            config.password().as_ref(),
-            ItemsHandlingFlags::OTHER_WORLDS & ItemsHandlingFlags::STARTING_INVENTORY,
-            vec!["DeathLink".to_string()],
-        )
+    fn new_connection(config: &Config) -> ap::Connection<SlotData> {
+        let mut options = ap::ConnectionOptions::new()
+            .receive_items(ap::ItemHandling::OtherWorlds {
+                own_world: false,
+                starting_inventory: true,
+            })
+            .tags(vec!["DeathLink"]);
+        if let Some(password) = config.password() {
+            options = options.password(password);
+        }
+
+        ap::Connection::new(config.url(), "Dark Souls III", config.slot(), options)
     }
 
-    /// Returns the simplified connection state for [client].
-    pub fn simple_connection_state(&self) -> SimpleConnectionState {
-        match self.connection.state() {
-            Disconnected(_) => SimpleConnectionState::Disconnected,
-            Connecting => SimpleConnectionState::Connecting,
-            Connected(_) => SimpleConnectionState::Connected,
-        }
+    /// Returns the current connection type.
+    pub fn connection_state_type(&self) -> ap::ConnectionStateType {
+        self.connection.state_type()
     }
 
     /// Returns the current user config.
@@ -114,13 +119,18 @@ impl Core {
     }
 
     /// Returns a reference to the Archipelago client, if it's connected.
-    pub fn client(&self) -> Option<&ConnectedClient> {
+    pub fn client(&self) -> Option<&ap::Client<SlotData>> {
         self.connection.client()
+    }
+
+    /// Returns a mutable reference to the Archipelago client, if it's connected.
+    pub fn client_mut(&mut self) -> Option<&mut ap::Client<SlotData>> {
+        self.connection.client_mut()
     }
 
     /// Returns the list of all logs that have been emitted in the current
     /// session.
-    pub fn logs(&self) -> &[RichPrint] {
+    pub fn logs(&self) -> &[ap::Print] {
         self.log_buffer.as_slice()
     }
 
@@ -132,39 +142,11 @@ impl Core {
     /// more game logic. It only returns an error if the mod has hit a fatal
     /// failure and can't continue any longer.
     pub fn tick(&mut self, error: bool) -> Result<()> {
-        let old_state = self.simple_connection_state();
-        self.connection.update();
-
-        if let Disconnected(err) = self.connection.state() {
-            match old_state {
-                SimpleConnectionState::Connecting => {
-                    self.log(
-                        if let Some(ArchipelagoError::IllegalResponse {
-                            received: "ConnectionRefused",
-                            ..
-                        }) = err.downcast_ref::<ArchipelagoError>()
-                        {
-                            "Connection refused. Make sure the server session is running and the \
-                             URL is up-to-date."
-                                .to_string()
-                        } else {
-                            format!("Connection failed: {}", err)
-                        },
-                    );
-                }
-                SimpleConnectionState::Connected => self.log(format!("Disconnected: {}", err)),
-                _ => {}
-            }
-        }
-
-        self.process_new_prints();
-
-        if error {
+        let connected = self.update();
+        if error || !connected {
             return Ok(());
         }
 
-        // Safety: It should be safe to access the item man during a frame draw,
-        // since we're on the main thread.
         let item_man = unsafe { MapItemMan::instance() };
         if item_man.is_err() {
             self.load_time = None;
@@ -188,25 +170,73 @@ impl Core {
         };
 
         self.check_dlc_error()?;
-        self.process_incoming_items(item_man);
-        self.process_inventory_items();
-        self.handle_death_link();
-        self.handle_goal();
+
+        // Process events that should only happen when the player has a save
+        // loaded and is actively playing.
+        use ap::Event::*;
+        for event in mem::take(&mut self.event_buffer) {
+            match event {
+                DeathLink { source, time, .. } => self.receive_death_link(source, time),
+                _ => {}
+            }
+        }
+
+        self.send_death_link()?;
+        self.process_incoming_items(&item_man);
+        self.process_inventory_items()?;
+        self.handle_goal()?;
 
         Ok(())
     }
 
-    /// Handle new prints that come from the Archipelago server.
-    fn process_new_prints(&mut self) {
-        let new_prints = self
-            .connection
-            .client_mut()
-            .map(|c| c.prints())
-            .unwrap_or_default();
-        for message in &new_prints {
-            info!("[APS] {message}");
+    /// Updates the Archipelago connection, adds any events that need processing
+    /// to [event_buffer], and returns whether or not a connection is active.
+    fn update(&mut self) -> bool {
+        use ap::Event::*;
+        let mut state = self.connection.state_type();
+        let mut events = self.connection.update();
+
+        // Process events that should happen even when the player isn't in an
+        // active save.
+        for event in events.extract_if(.., |e| matches!(e, Connected | Error(_) | Print(_))) {
+            match event {
+                Connected => {
+                    state = ap::ConnectionStateType::Connected;
+                }
+                Error(err) if err.is_fatal() => {
+                    let err = self.connection.err();
+                    self.log(
+                        if matches!(err, ap::Error::WebSocket(tungstenite::Error::Io(io))
+                                         if io.kind() == io::ErrorKind::ConnectionRefused)
+                        {
+                            format!(
+                                "Connection refused. Make sure the server session is running and \
+                                 the URL is up-to-date."
+                            )
+                        } else if state == ap::ConnectionStateType::Connected {
+                            format!("Connection failed: {}", err)
+                        } else {
+                            format!("Disconnected: {}", err)
+                        },
+                    );
+                    self.event_buffer.clear();
+                }
+                Error(err) => self.log(err.to_string()),
+                Print(print) => {
+                    info!("[APS] {print}");
+                    self.log_buffer.push(print);
+                }
+                _ => {}
+            }
         }
-        self.log_buffer.extend(new_prints);
+
+        if state == ap::ConnectionStateType::Connected {
+            self.event_buffer.extend(events);
+            true
+        } else {
+            debug_assert!(self.event_buffer.is_empty());
+            false
+        }
     }
 
     /// Returns an error if the user's static randomizer version doesn't match
@@ -230,10 +260,7 @@ impl Core {
     /// seed in the server, the save, and/or the config. Also updates the save
     /// data's notion based on whatever is available if it doesn't exist yet.
     fn check_seed_conflict(&mut self) -> Result<()> {
-        let client_seed = self
-            .connection
-            .client()
-            .map(|c| c.room_info().seed_name.as_str());
+        let client_seed = self.connection.client().map(|c| c.seed_name());
         let save = SaveData::instance();
         let save_seed = save.as_ref().and_then(|s| s.seed.as_ref());
 
@@ -271,15 +298,15 @@ impl Core {
 
     /// Returns an error if [config] expects DLC to be installed and it is not.
     fn check_dlc_error(&self) -> Result<()> {
-        if let Connected(client) = self.connection.state() &&
-            let Ok(dlc) = (unsafe { CSDlc::instance() }) &&
+        if let Ok(dlc) = (unsafe { CSDlc::instance() }) &&
             // The DLC always registers as not installed until the player clicks
             // through the initial opening screen and loads their global save
             // data. Ideally we should find a better way of detecting when that
             // happens, but for now we just wait to indicate an error until
             // they're actually in a game.
             (unsafe { MapItemMan::instance() }).is_ok() &&
-            client.connected().slot_data.options.enable_dlc
+            self.connection.client().is_some_and(|c|
+            c.slot_data().options.enable_dlc)
             && (!dlc.dlc1_installed || !dlc.dlc2_installed)
         {
             bail!(
@@ -299,8 +326,8 @@ impl Core {
 
     /// Handle new items, distributing them to the player when appropriate. This
     /// also initializes the [SaveData] for a new file.
-    fn process_incoming_items(&mut self, item_man: InstanceResult<&mut MapItemMan>) {
-        let Connected(client) = self.connection.state_mut() else {
+    fn process_incoming_items(&mut self, item_man: &InstanceResult<&mut MapItemMan>) {
+        let Some(client) = self.connection.client() else {
             return;
         };
         let Ok(item_man) = item_man else {
@@ -323,31 +350,44 @@ impl Core {
         }
 
         if let Some(item) = client
-            .items()
+            .received_items()
             .iter()
             .find(|item| item.index() >= save_data.items_granted)
         {
+            let id_key = I64Key(item.item().id());
+            let ds3_id = client
+                .slot_data()
+                .ap_ids_to_item_ids
+                .get(&id_key)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Archipelago item {:?} should have a DS3 ID defined in slot data",
+                        item.item()
+                    )
+                })
+                .0;
+            let quantity = client
+                .slot_data()
+                .item_counts
+                .get(&id_key)
+                .copied()
+                .unwrap_or(1);
+
             info!(
-                "Granting {} (AP ID {}, DS3 ID {:?}{})",
-                item.ap_name(),
-                item.ap_id(),
-                item.ds3_id(),
-                if let Some(location) = item.location_name() {
-                    format!("from {}", location)
-                } else {
-                    "".to_string()
-                }
+                "Granting {} (AP ID {}, DS3 ID {:?} from {})",
+                item.item().name(),
+                item.item().id(),
+                ds3_id,
+                item.location().name()
             );
 
             // Grant Path of the Dragon as a gesture rather than an item.
-            if item.ds3_id().category() == ItemCategory::Goods
-                && item.ds3_id().uncategorized().value() == 9030
-            {
-                player_game_data.grant_gesture(29, item.ds3_id());
+            if ds3_id.category() == ItemCategory::Goods && ds3_id.uncategorized().value() == 9030 {
+                player_game_data.grant_gesture(29, ds3_id);
             } else {
                 item_man.grant_item(ItemBufferEntry {
-                    id: item.ds3_id(),
-                    quantity: item.quantity(),
+                    id: ds3_id,
+                    quantity,
                     durability: -1,
                 });
             }
@@ -359,15 +399,15 @@ impl Core {
 
     /// Removes any placeholder items from the player's inventory and notifies
     /// the server that they've been accessed.
-    fn process_inventory_items(&mut self) {
+    fn process_inventory_items(&mut self) -> Result<()> {
         let Some(ref mut save_data) = SaveData::instance_mut() else {
-            return;
+            return Ok(());
         };
         let Ok(game_data_man) = (unsafe { GameDataMan::instance() }) else {
-            return;
+            return Ok(());
         };
         let Ok(regulation_manager) = (unsafe { CSRegulationManager::instance() }) else {
-            return;
+            return Ok(());
         };
 
         // We have to make a separate vector here so we aren't borrowing while
@@ -427,67 +467,88 @@ impl Core {
             game_data_man.remove_item(id, 1);
         }
 
-        if let Connected(client) = self.connection.state_mut()
+        if let Some(client) = self.connection.client_mut()
             && save_data.locations.len() > self.locations_sent
         {
-            client.location_checks(save_data.locations.iter().copied());
+            client.mark_checked(save_data.locations.iter().copied())?;
             self.locations_sent = save_data.locations.len();
         }
+        Ok(())
     }
 
-    /// Kills the player after a death link is received and sends a death link
-    /// when the player dies.
-    pub fn handle_death_link(&mut self) {
-        let Connected(client) = self.connection.state_mut() else {
-            return;
-        };
-        if !client.connected().slot_data.options.death_link {
+    /// Kills the player after a death link is received.
+    fn receive_death_link(&mut self, source: String, time: SystemTime) {
+        if !self.allow_death_link() {
             return;
         }
-
-        // Consume the death link even if we ignore it.
-        let death_link = client.death_link();
-        let death_link = death_link.as_ref();
-        // Ignore the death link and avoid sending out a new death notification
-        // if we've experienced one recently by our own reckoning of time...
-        if self.last_death_link.elapsed() < DEATH_LINK_GRACE_PERIOD ||
-            // ...or if the stated time on the death link is within the last
-            // grace period.
-            death_link
-                .and_then(|dl| SystemTime::now().duration_since(dl.time).ok())
-                .is_some_and(|dur| dur < DEATH_LINK_GRACE_PERIOD)
+        if self
+            .connection
+            .client()
+            .is_none_or(|c| c.this_player().name() == source)
         {
             return;
         }
+
+        let last_death_link_time = SystemTime::now() - self.last_death_link.elapsed();
+        match time.duration_since(last_death_link_time) {
+            Ok(dur) if dur < DEATH_LINK_GRACE_PERIOD => return,
+            // An error means that the last death link was *after* [time].
+            Err(_) => return,
+            _ => {}
+        }
+
         let Ok(player) = (unsafe { PlayerIns::instance() }) else {
             return;
         };
 
         // Always ignore death links that we sent.
-        if death_link.is_some_and(|dl| dl.source != client.room_info().seed_name) {
-            player.kill();
-            self.last_death_link = Instant::now();
-        } else if player.super_chr_ins.modules.data.hp == 0 {
-            client.send_death_link();
-            self.last_death_link = Instant::now();
+        player.kill();
+        self.last_death_link = Instant::now();
+    }
+
+    /// Sends a death link notification when the player dies.
+    fn send_death_link(&mut self) -> Result<()> {
+        if !self.allow_death_link() {
+            return Ok(());
         }
+        let Some(client) = self.connection.client_mut() else {
+            return Ok(());
+        };
+        let Ok(player) = (unsafe { PlayerIns::instance() }) else {
+            return Ok(());
+        };
+        if player.super_chr_ins.modules.data.hp != 0 {
+            return Ok(());
+        }
+
+        client.death_link(Default::default())?;
+        self.last_death_link = Instant::now();
+        Ok(())
+    }
+
+    /// Returns whether death links (sending or receiving) are currently
+    /// allowed.
+    fn allow_death_link(&self) -> bool {
+        let Some(client) = self.connection.client() else {
+            return false;
+        };
+
+        client.slot_data().options.death_link
+            && self.last_death_link.elapsed() >= DEATH_LINK_GRACE_PERIOD
     }
 
     /// Detects when the player has won the game and notifies the server.
-    pub fn handle_goal(&mut self) {
+    pub fn handle_goal(&mut self) -> Result<()> {
         if let Ok(event_man) = (unsafe { SprjEventFlagMan::instance() })
-            && let Connected(client) = self.connection.state()
+            && let Some(client) = self.connection.client_mut()
             && !self.sent_goal
             && event_man.get_flag(14100800.try_into().unwrap())
         {
-            client.send_goal();
+            client.set_status(ap::ClientStatus::Goal)?;
             self.sent_goal = true;
         }
-    }
 
-    /// The player's slot ID, if it's known.
-    pub fn slot(&self) -> Option<i64> {
-        self.connection.client().map(|c| c.connected().slot)
+        Ok(())
     }
 
     /// Writes a message to the log buffer that we display to the user in the
@@ -498,14 +559,6 @@ impl Core {
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
         self.log_buffer
-            .push(RichPrint::message(message_ref.to_string()));
+            .push(ap::Print::message(message_ref.to_string()));
     }
-}
-
-/// A simplification of [ClientConnectionState] that doesn't contain any
-/// actual data and thus doesn't need to worry about lifetimes.
-pub enum SimpleConnectionState {
-    Disconnected,
-    Connecting,
-    Connected,
 }

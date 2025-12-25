@@ -9,7 +9,7 @@ name = "archipelago"
 
 [dependencies]
 anyhow = "1.0.100"
-archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "rich-message" }
+archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "refactor" }
 backtrace = "0.3.76"
 bincode = "2.0.1"
 chrono = "0.4.42"
@@ -26,7 +26,7 @@ mint = "0.5.9"
 pelite = "0.10"
 serde = { version = "1.0.228", features = ["derive"] }
 simplelog = "0.12.2"
-tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
+tungstenite = "0.28.0"
 windows-result = "0.4.1"
 
 [dependencies.windows]

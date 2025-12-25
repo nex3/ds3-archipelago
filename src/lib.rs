@@ -13,7 +13,6 @@ use windows::Win32::{
 };
 use windows::core::*;
 
-mod client;
 mod clipboard_backend;
 mod config;
 mod core;
