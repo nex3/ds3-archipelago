@@ -72,6 +72,12 @@ fn try_load_mod_directory(size: u32) -> Result<TryLoadModDirectoryResult> {
         let mut path = get_module_path(unsafe { module.assume_init() })?;
         if path.file_name().and_then(|op| op.to_str()) == Some("me3_mod_host.dll") {
             println!("  Found ME3 DLL: {:?}", path);
+            if path.ends_with("bin/win64") {
+                // The Linux ME3 distribution has me3_mod_host.dll in a deeper
+                // directory than the Windows distribution, so pop one extra
+                // layer off.
+                path.pop();
+            }
             path.pop();
             path.pop();
             println!("  Mod path: {:?}", path);
