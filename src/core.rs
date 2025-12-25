@@ -175,9 +175,8 @@ impl Core {
         // loaded and is actively playing.
         use ap::Event::*;
         for event in mem::take(&mut self.event_buffer) {
-            match event {
-                DeathLink { source, time, .. } => self.receive_death_link(source, time),
-                _ => {}
+            if let DeathLink { source, time, .. } = event {
+                self.receive_death_link(source, time)
             }
         }
 
@@ -209,10 +208,9 @@ impl Core {
                         if matches!(err, ap::Error::WebSocket(tungstenite::Error::Io(io))
                                          if io.kind() == io::ErrorKind::ConnectionRefused)
                         {
-                            format!(
-                                "Connection refused. Make sure the server session is running and \
-                                 the URL is up-to-date."
-                            )
+                            "Connection refused. Make sure the server session is running and the \
+                             URL is up-to-date."
+                                .into()
                         } else if state == ap::ConnectionStateType::Connected {
                             format!("Connection failed: {}", err)
                         } else {
@@ -447,7 +445,7 @@ impl Core {
                     .set_gesture_acquired(29, true);
             } else if let Some((real_id, quantity)) = row.archipelago_item() {
                 info!("  Converting to {}x {:?}", quantity, real_id);
-                game_data_man.give_item_directly(real_id, quantity.try_into().unwrap());
+                game_data_man.give_item_directly(real_id, quantity);
             } else {
                 // Presumably any item without local item data is a foreign
                 // item, but we'll log a bunch of extra data in case there's a

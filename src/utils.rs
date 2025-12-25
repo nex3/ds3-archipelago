@@ -13,7 +13,7 @@ use windows_result::Error as WindowsError;
 /// Returns the path to the parent directory of the mod.
 pub fn mod_directory<'a>() -> Result<&'a Path> {
     // We should use OnceLock.get_or_try_init once it's stable.
-    static LOCK: LazyLock<Result<PathBuf>> = LazyLock::new(|| load_mod_directory());
+    static LOCK: LazyLock<Result<PathBuf>> = LazyLock::new(load_mod_directory);
 
     match *LOCK {
         Ok(ref path) => Ok(path.as_path()),
