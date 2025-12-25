@@ -1,3 +1,12 @@
+## 4.0.0-alpha.6
+
+* Properly identify the mod directory under Proton.
+
+* Upgrade to a newer version of ME3 which should reduce enemy randomizer
+  crashes.
+
+* Improve a number of details of interaction with the Archipelago server.
+
 ## 4.0.0-alpha.5
 
 * Fix a rare crash when obtaining weapons and/or armor.

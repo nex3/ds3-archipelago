@@ -1,6 +1,6 @@
 [package]
 name = "ds3-archipelago"
-version = "4.0.0-alpha.5"
+version = "4.0.0-alpha.6"
 edition = "2024"
 
 [lib]
