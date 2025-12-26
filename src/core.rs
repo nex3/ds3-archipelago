@@ -8,7 +8,7 @@ use darksouls3::sprj::*;
 use fromsoftware_shared::{FromStatic, InstanceResult};
 use log::*;
 
-use crate::item::{CategorizedItemIDExt, EquipParamExt};
+use crate::item::{ItemIdExt, EquipParamExt};
 use crate::slot_data::{I64Key, SlotData};
 use crate::{config::Config, save_data::*};
 
@@ -380,7 +380,7 @@ impl Core {
             );
 
             // Grant Path of the Dragon as a gesture rather than an item.
-            if ds3_id.category() == ItemCategory::Goods && ds3_id.uncategorized().value() == 9030 {
+            if ds3_id.category() == ItemCategory::Goods && ds3_id.param_id() == 9030 {
                 player_game_data.grant_gesture(29, ds3_id);
             } else {
                 item_man.grant_item(ItemBufferEntry {

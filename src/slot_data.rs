@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use darksouls3::sprj::CategorizedItemID;
+use darksouls3::sprj::ItemId;
 use serde::{Deserialize, Deserializer};
 use std::{hash::Hash, str::FromStr};
 
@@ -10,7 +10,7 @@ use std::{hash::Hash, str::FromStr};
 #[serde(rename_all = "camelCase")]
 pub struct SlotData {
     /// A map from Archipelago's item IDs to DS3's.
-    pub ap_ids_to_item_ids: HashMap<I64Key, DeserializableCategorizedItemID>,
+    pub ap_ids_to_item_ids: HashMap<I64Key, DeserializableItemId>,
 
     /// A map from Archipelago's item IDs to the number of instances of that
     /// item the given ID should grant.
@@ -52,16 +52,16 @@ impl TryFrom<&str> for I64Key {
     }
 }
 
-/// A deserializable wrapper over [CategorizedItemID].
+/// A deserializable wrapper over [ItemId].
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "u32")]
 #[repr(transparent)]
-pub struct DeserializableCategorizedItemID(pub CategorizedItemID);
+pub struct DeserializableItemId(pub ItemId);
 
-impl TryFrom<u32> for DeserializableCategorizedItemID {
-    type Error = <CategorizedItemID as TryFrom<u32>>::Error;
+impl TryFrom<u32> for DeserializableItemId {
+    type Error = <ItemId as TryFrom<u32>>::Error;
 
-    fn try_from(value: u32) -> Result<DeserializableCategorizedItemID, Self::Error> {
-        Ok(DeserializableCategorizedItemID(value.try_into()?))
+    fn try_from(value: u32) -> Result<DeserializableItemId, Self::Error> {
+        Ok(DeserializableItemId(value.try_into()?))
     }
 }

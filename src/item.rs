@@ -1,6 +1,6 @@
 use darksouls3::cs::CSRegulationManager;
 use darksouls3::param::{EQUIP_PARAM_GOODS_ST, EquipParam};
-use darksouls3::sprj::{CategorizedItemID, ItemBuffer, ItemCategory, MAP_ITEM_MAN_GRANT_ITEM_VA};
+use darksouls3::sprj::{ItemId, ItemBuffer, ItemCategory, MAP_ITEM_MAN_GRANT_ITEM_VA};
 use fromsoftware_shared::FromStatic;
 use ilhook::x64::*;
 use log::*;
@@ -34,7 +34,7 @@ fn on_grant_items(items: &mut ItemBuffer) {
     for item in items.iter_mut() {
         info!("Received {}x {:?}", item.quantity, item.id);
 
-        if item.id.category() != ItemCategory::Goods || item.id.uncategorized().value() <= 3780000 {
+        if item.id.category() != ItemCategory::Goods || item.id.param_id() <= 3780000 {
             // This is a vanilla item.
             continue;
         }
@@ -42,7 +42,7 @@ fn on_grant_items(items: &mut ItemBuffer) {
         // Replace placeholders with their real equivalents.
         let row = &unsafe { CSRegulationManager::instance() }
             .expect("CSRegulationManager should be available in on_grant_items")
-            .get_param::<EQUIP_PARAM_GOODS_ST>()[item.id.uncategorized().value().into()];
+            .get_param::<EQUIP_PARAM_GOODS_ST>()[item.id.param_id().into()];
         if let Some((real_id, quantity)) = row.archipelago_item() {
             info!("  Archipelago location: {}", row.archipelago_location_id());
             info!("  Converting to {}x {:?}", quantity, real_id);
@@ -66,17 +66,17 @@ fn on_grant_items(items: &mut ItemBuffer) {
     }
 }
 
-pub trait CategorizedItemIDExt {
+pub trait ItemIdExt {
     /// Returns whether this ID represents an item added specifically for
     /// Archipelago.
     fn is_archipelago(&self) -> bool;
 }
 
-impl CategorizedItemIDExt for CategorizedItemID {
+impl ItemIdExt for ItemId {
     fn is_archipelago(&self) -> bool {
         use ItemCategory::*;
 
-        let id = self.uncategorized().value();
+        let id = self.param_id();
         match self.category() {
             Weapon => id > 23010000,
             Protector => id > 99003000,
@@ -93,7 +93,7 @@ pub trait EquipParamExt {
     /// If this parameter represents a synthetic wrapper around a local item,
     /// returns the real item ID and the quantity that should be given to the
     /// player.
-    fn archipelago_item(&self) -> Option<(CategorizedItemID, u32)>;
+    fn archipelago_item(&self) -> Option<(ItemId, u32)>;
 }
 
 impl<T: ?Sized + EquipParam> EquipParamExt for T {
@@ -102,7 +102,7 @@ impl<T: ?Sized + EquipParam> EquipParamExt for T {
             + ((self.vagrant_bonus_ene_drop_item_lot_id() as i64) << 32)
     }
 
-    fn archipelago_item(&self) -> Option<(CategorizedItemID, u32)> {
+    fn archipelago_item(&self) -> Option<(ItemId, u32)> {
         if self.basic_price() == 0 {
             None
         } else {
