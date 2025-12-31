@@ -37,3 +37,7 @@ features = [
     "Win32_System_SystemServices",
     "Win32_UI_WindowsAndMessaging",
 ]
+
+[patch.crates-io]
+imgui = { git = "https://github.com/imgui-rs/imgui-rs" }
+imgui-sys = { git = "https://github.com/imgui-rs/imgui-rs" }

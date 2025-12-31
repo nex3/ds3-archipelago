@@ -47,12 +47,6 @@ impl ErrorDisplay {
 
 impl ImguiRenderLoop for ErrorDisplay {
     fn render(&mut self, ui: &mut Ui) {
-        // Work around veeenu/hudhook#235
-        ui.window("tmp")
-            .size([100., 100.], Condition::Always)
-            .position([-200., -200.], Condition::Always)
-            .build(|| {});
-
         let io = ui.io();
         let mut flag = InputFlags::empty();
         if io.want_capture_mouse {
