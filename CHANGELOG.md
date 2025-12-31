@@ -1,3 +1,7 @@
+## 4.0.0-alpha.7
+
+* Fix a bug where the game crashed when the Archipelago connection closed.
+
 ## 4.0.0-alpha.6
 
 * Properly identify the mod directory under Proton.
