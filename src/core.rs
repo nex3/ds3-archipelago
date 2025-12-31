@@ -1,14 +1,14 @@
 use std::time::{Duration, Instant, SystemTime};
 use std::{io, mem};
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use archipelago_rs as ap;
 use darksouls3::cs::*;
 use darksouls3::sprj::*;
 use fromsoftware_shared::{FromStatic, InstanceResult};
 use log::*;
 
-use crate::item::{ItemIdExt, EquipParamExt};
+use crate::item::{EquipParamExt, ItemIdExt};
 use crate::slot_data::{I64Key, SlotData};
 use crate::{config::Config, save_data::*};
 
@@ -56,6 +56,10 @@ pub struct Core {
     /// so that it's resent every time the player starts the game, just in case
     /// it got lost in transit.
     sent_goal: bool,
+
+    /// The fatal error that this has encountered, if any. If this is not
+    /// `None`, most in-game processing will be disabled.
+    error: Option<Error>,
 }
 
 /// The grace period between MapItemMan starting to exist and the mod beginning
@@ -81,6 +85,7 @@ impl Core {
             locations_sent: 0,
             last_death_link: Instant::now(),
             sent_goal: false,
+            error: None,
         })
     }
 
@@ -134,16 +139,80 @@ impl Core {
         self.log_buffer.as_slice()
     }
 
-    /// A function that's run just before rendering the overlay UI in every
-    /// frame render. This is where the core logic of the mod takes place.
+    /// Runs the core logic of the mod. This may set [error], which should be
+    /// surfaced to the user.
+    pub fn update(&mut self) {
+        self.update_always();
+        if let Err(err) = self.update_live() {
+            self.error = Some(err);
+        }
+    }
+
+    /// If this client has encountered a fatal error, takes ownership of it.
+    pub fn take_error(&mut self) -> Option<Error> {
+        if let Some(err) = self.error.take() {
+            self.error = Some(ap::Error::Elsewhere.into());
+            Some(err)
+        } else {
+            None
+        }
+    }
+
+    /// Updates the Archipelago connection, adds any events that need processing
+    /// to [event_buffer].
     ///
-    /// Thistakes an [error] parameter which indicates that a fatal error is
-    /// currently being displayed to the user and the mod shouldn't process any
-    /// more game logic. It only returns an error if the mod has hit a fatal
-    /// failure and can't continue any longer.
-    pub fn tick(&mut self, error: bool) -> Result<()> {
-        let connected = self.update();
-        if error || !connected {
+    /// This is always run regardless of whether the client is connected or the
+    /// mod has experienced a fatal error.
+    fn update_always(&mut self) {
+        use ap::Event::*;
+        let mut state = self.connection.state_type();
+        let mut events = self.connection.update();
+
+        // Process events that should happen even when the player isn't in an
+        // active save.
+        for event in events.extract_if(.., |e| matches!(e, Connected | Error(_) | Print(_))) {
+            match event {
+                Connected => {
+                    state = ap::ConnectionStateType::Connected;
+                }
+                Error(err) if err.is_fatal() => {
+                    let err = self.connection.err();
+                    self.log(
+                        if matches!(err, ap::Error::WebSocket(tungstenite::Error::Io(io))
+                                         if io.kind() == io::ErrorKind::ConnectionRefused)
+                        {
+                            "Connection refused. Make sure the server session is running and the \
+                             URL is up-to-date."
+                                .into()
+                        } else if state == ap::ConnectionStateType::Connected {
+                            format!("Connection failed: {}", err)
+                        } else {
+                            format!("Disconnected: {}", err)
+                        },
+                    );
+                    self.event_buffer.clear();
+                }
+                Error(err) => self.log(err.to_string()),
+                Print(print) => {
+                    info!("[APS] {print}");
+                    self.log_buffer.push(print);
+                }
+                _ => {}
+            }
+        }
+
+        if state == ap::ConnectionStateType::Connected {
+            self.event_buffer.extend(events);
+        } else {
+            debug_assert!(self.event_buffer.is_empty());
+        }
+    }
+
+    /// Updates the game logic and checks for common errors. This does nothing
+    /// if we're not currently connected to the Archipelago server or if the mod
+    /// has encountered a fatal error.
+    fn update_live(&mut self) -> Result<()> {
+        if self.connection.client().is_none() || self.error.is_some() {
             return Ok(());
         }
 
@@ -186,55 +255,6 @@ impl Core {
         self.handle_goal()?;
 
         Ok(())
-    }
-
-    /// Updates the Archipelago connection, adds any events that need processing
-    /// to [event_buffer], and returns whether or not a connection is active.
-    fn update(&mut self) -> bool {
-        use ap::Event::*;
-        let mut state = self.connection.state_type();
-        let mut events = self.connection.update();
-
-        // Process events that should happen even when the player isn't in an
-        // active save.
-        for event in events.extract_if(.., |e| matches!(e, Connected | Error(_) | Print(_))) {
-            match event {
-                Connected => {
-                    state = ap::ConnectionStateType::Connected;
-                }
-                Error(err) if err.is_fatal() => {
-                    let err = self.connection.err();
-                    self.log(
-                        if matches!(err, ap::Error::WebSocket(tungstenite::Error::Io(io))
-                                         if io.kind() == io::ErrorKind::ConnectionRefused)
-                        {
-                            "Connection refused. Make sure the server session is running and the \
-                             URL is up-to-date."
-                                .into()
-                        } else if state == ap::ConnectionStateType::Connected {
-                            format!("Connection failed: {}", err)
-                        } else {
-                            format!("Disconnected: {}", err)
-                        },
-                    );
-                    self.event_buffer.clear();
-                }
-                Error(err) => self.log(err.to_string()),
-                Print(print) => {
-                    info!("[APS] {print}");
-                    self.log_buffer.push(print);
-                }
-                _ => {}
-            }
-        }
-
-        if state == ap::ConnectionStateType::Connected {
-            self.event_buffer.extend(events);
-            true
-        } else {
-            debug_assert!(self.event_buffer.is_empty());
-            false
-        }
     }
 
     /// Returns an error if the user's static randomizer version doesn't match

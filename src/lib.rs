@@ -1,10 +1,12 @@
+use std::sync::{Arc, Mutex};
 use std::{fs, panic, path::Path, time::Duration};
 
 use anyhow::Result;
 use backtrace::Backtrace;
 use chrono::prelude::*;
+use darksouls3::sprj::{SprjTaskGroupIndex, SprjTaskImp};
 use darksouls3::util::{input::InputBlocker, system::wait_for_system_init};
-use fromsoftware_shared::program::Program;
+use fromsoftware_shared::{FromStatic, Program, SharedTaskImpExt};
 use hudhook::{Hudhook, hooks::dx11::ImguiDx11Hooks};
 use log::*;
 use simplelog::{ColorChoice, CombinedLogger, SharedLogger, TermLogger, TerminalMode, WriteLogger};
@@ -12,6 +14,8 @@ use windows::Win32::{
     Foundation::*, System::SystemServices::*, UI::WindowsAndMessaging::MessageBoxW,
 };
 use windows::core::*;
+
+use crate::core::Core;
 
 mod clipboard_backend;
 mod config;
@@ -65,8 +69,25 @@ extern "C" fn DllMain(hmodule: HINSTANCE, call_reason: u32) -> bool {
 
         info!("Game system initialized.");
 
+        // This mutex isn't strictly necessary since in practice we're only ever
+        // touching this on DS3's main thread. But Rust doesn't have any way of
+        // knowing that and using a Mutex is simpler than creating a newtype
+        // that implements Sync, so we do it anyway. Because there won't be any
+        // contention, it should be very inexpensive.
+        let core = Core::new().map(|core| Arc::new(Mutex::new(core)));
+
+        if let Ok(core) = core.as_ref() {
+            let core = core.clone();
+            unsafe { SprjTaskImp::instance() }
+                .expect("DS3 task runner should be available")
+                .run_recurring(
+                    move |_: &usize| core.lock().unwrap().update(),
+                    SprjTaskGroupIndex::FrameBegin,
+                );
+        }
+
         if let Err(e) = Hudhook::builder()
-            .with::<ImguiDx11Hooks>(ErrorDisplay::new(blocker))
+            .with::<ImguiDx11Hooks>(ErrorDisplay::new(core, blocker))
             .with_hmodule(hmodule)
             .build()
             .apply()

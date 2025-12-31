@@ -1,6 +1,6 @@
 use darksouls3::cs::CSRegulationManager;
 use darksouls3::param::{EQUIP_PARAM_GOODS_ST, EquipParam};
-use darksouls3::sprj::{ItemId, ItemBuffer, ItemCategory, MAP_ITEM_MAN_GRANT_ITEM_VA};
+use darksouls3::sprj::{ItemBuffer, ItemCategory, ItemId, MAP_ITEM_MAN_GRANT_ITEM_VA};
 use fromsoftware_shared::FromStatic;
 use ilhook::x64::*;
 use log::*;

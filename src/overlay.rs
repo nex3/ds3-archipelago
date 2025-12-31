@@ -1,13 +1,13 @@
 use std::mem;
+use std::sync::{Arc, Mutex};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
-use hudhook::RenderContext;
+use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use log::*;
 
-use anyhow::Result;
-
-use crate::{core::Core, utils::PopupModalExt};
+use crate::core::Core;
+use crate::utils::PopupModalExt;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -27,7 +27,7 @@ const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 pub struct Overlay {
     /// The struct that manages the core mod logic that's not strictly
     /// UI-related.
-    core: Core,
+    core: Arc<Mutex<Core>>,
 
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
@@ -59,58 +59,16 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            core: Core::new()?,
+    pub fn new(core: Arc<Mutex<Core>>) -> Self {
+        Self {
+            core,
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
-        })
-    }
-
-    /// Like [ImguiRenderLoop.render], except that this can return a [Result] to
-    /// signal a fatal error.
-    ///
-    /// The [error] flag indicates whether this has experienced a fatal error
-    /// that it's in the process of displaying to the user.
-    pub fn render(&mut self, ui: &mut Ui, error: bool) -> Result<()> {
-        self.core.tick(error)?;
-
-        let Some(viewport_size) = self.viewport_size else {
-            return Ok(());
-        };
-
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .build(|| {
-                ui.set_window_font_scale(1.8);
-
-                self.render_connection_widget(ui);
-                ui.separator();
-                self.render_log_window(ui);
-                self.render_say_input(ui);
-                self.render_url_popup(ui);
-            });
-
-        Ok(())
-    }
-
-    /// Like [ImguiRenderLoop.before_render].
-    pub fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
+        }
     }
 
     /// Renders the modal popup which queries the player for connection
@@ -133,7 +91,7 @@ impl Overlay {
                 ui.disabled(self.popup_url.is_empty(), || {
                     if ui.button("Connect") {
                         ui.close_current_popup();
-                        if let Err(e) = self.core.update_url(&self.popup_url) {
+                        if let Err(e) = self.core.lock().unwrap().update_url(&self.popup_url) {
                             error!("Failed to save config: {e}");
                         }
                     }
@@ -146,7 +104,8 @@ impl Overlay {
     fn render_connection_widget(&mut self, ui: &Ui) {
         ui.text("Connection status:");
         ui.same_line();
-        match self.core.connection_state_type() {
+        let core = self.core.lock().unwrap();
+        match core.connection_state_type() {
             ap::ConnectionStateType::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
             ap::ConnectionStateType::Connecting => ui.text("Connecting..."),
             ap::ConnectionStateType::Disconnected => {
@@ -154,7 +113,7 @@ impl Overlay {
                 ui.same_line();
                 if ui.button("Change URL") {
                     ui.open_popup("#url-popup");
-                    self.core.config().url().clone_into(&mut self.popup_url);
+                    core.config().url().clone_into(&mut self.popup_url);
                 }
             }
         }
@@ -168,7 +127,8 @@ impl Overlay {
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(true)
             .build(|| {
-                let logs = self.core.logs();
+                let core = self.core.lock().unwrap();
+                let logs = core.logs();
                 if logs.len() != self.logs_emitted {
                     self.frames_since_new_logs = 0;
                     self.logs_emitted = logs.len();
@@ -188,8 +148,8 @@ impl Overlay {
                             | AdminCommandResult { .. }
                             | Unknown { .. } => 0xff,
                             ItemSend { item, .. } | ItemCheat { item, .. } | Hint { item, .. }
-                                if self.core.config().slot() == item.receiver().name()
-                                    || self.core.config().slot() == item.sender().name() =>
+                                if core.config().slot() == item.receiver().name()
+                                    || core.config().slot() == item.sender().name() =>
                             {
                                 0xFF
                             }
@@ -206,7 +166,8 @@ impl Overlay {
 
     /// Renders the text box in which users can write chats to the server.
     fn render_say_input(&mut self, ui: &Ui) {
-        ui.disabled(self.core.client().is_none(), || {
+        let mut core = self.core.lock().unwrap();
+        ui.disabled(core.client().is_none(), || {
             let width = ui.push_item_width(-40.);
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
@@ -219,12 +180,46 @@ impl Overlay {
             send = ui.arrow_button("##say-button", Direction::Right) || send;
             drop(width);
 
-            if send && let Some(client) = self.core.client_mut() {
+            if send && let Some(client) = core.client_mut() {
                 // We don't have a great way to surface these errors, and
                 // they're non-fatal, so just ignore them.
                 let _ = client.say(mem::take(&mut self.say_input));
             }
         });
+    }
+}
+
+impl ImguiRenderLoop for Overlay {
+    fn render(&mut self, ui: &mut Ui) {
+        let Some(viewport_size) = self.viewport_size else {
+            return;
+        };
+
+        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
+            .build(|| {
+                ui.set_window_font_scale(1.8);
+
+                self.render_connection_widget(ui);
+                ui.separator();
+                self.render_log_window(ui);
+                self.render_say_input(ui);
+                self.render_url_popup(ui);
+            });
+    }
+
+    fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
     }
 }
 

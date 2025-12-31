@@ -1,10 +1,14 @@
+use std::sync::{Arc, Mutex};
+
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 use darksouls3::util::input::{InputBlocker, InputFlags};
 
-use crate::{clipboard_backend::WindowsClipboardBackend, overlay::Overlay, utils::PopupModalExt};
+use crate::{
+    Core, clipboard_backend::WindowsClipboardBackend, overlay::Overlay, utils::PopupModalExt,
+};
 
 /// A wrapper around the rest of the mod's UI that doesn't expect any state to
 /// exist. This allows the full [Overlay] to assume that its [Core] exists while
@@ -18,6 +22,10 @@ pub struct ErrorDisplay {
     /// otherwise.
     overlay: Option<Overlay>,
 
+    /// The core game logic. Used to extract fatal errors to display to the
+    /// user.
+    core: Option<Arc<Mutex<Core>>>,
+
     /// A fatal error to display. Once set, this can't be changed, even if other
     /// fatal errors are detected later.
     error: Option<Error>,
@@ -27,17 +35,20 @@ pub struct ErrorDisplay {
 }
 
 impl ErrorDisplay {
-    pub fn new(input_blocker: &'static InputBlocker) -> Self {
-        match Overlay::new() {
-            Ok(overlay) => Self {
+    /// Creates a new [ErrorDisplay] that will only ever be run
+    pub fn new(core: Result<Arc<Mutex<Core>>>, input_blocker: &'static InputBlocker) -> Self {
+        match core {
+            Ok(core) => Self {
                 input_blocker,
-                overlay: Some(overlay),
+                overlay: Some(Overlay::new(core.clone())),
+                core: Some(core),
                 error: None,
                 show_full_error: false,
             },
             Err(error) => Self {
                 input_blocker,
                 overlay: None,
+                core: None,
                 error: Some(error),
                 show_full_error: false,
             },
@@ -62,11 +73,14 @@ impl ImguiRenderLoop for ErrorDisplay {
         }
         self.input_blocker.block_only(flag);
 
-        if let Some(overlay) = &mut self.overlay
-            && let Err(error) = overlay.render(ui, self.error.is_some())
-            && self.error.is_none()
+        if let Some(overlay) = &mut self.overlay {
+            overlay.render(ui);
+        }
+
+        if self.error.is_none()
+            && let Some(core) = &self.core
         {
-            self.error = Some(error);
+            self.error = core.lock().unwrap().take_error();
         }
 
         let Some(error) = &self.error else { return };
