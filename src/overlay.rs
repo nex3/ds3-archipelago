@@ -2,6 +2,8 @@ use std::mem;
 use std::sync::{Arc, Mutex};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
+use darksouls3::sprj::{MapItemMan, MenuMan};
+use fromsoftware_shared::FromStatic;
 use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use imgui_sys::ImVec2;
@@ -53,15 +55,11 @@ pub struct Overlay {
     /// The current font scale for the overlay UI.
     font_scale: f32,
 
-    /// Whether compact mode is enabled. When enabled, hides the chat input
-    /// and horizontal scrollbar for a cleaner view.
-    is_compact_mode: bool,
-
     /// The unfocused window opacity for the overlay UI.
     unfocused_window_opacity: f32,
 
     /// Whether the overlay window was focused in the previous frame.
-    is_window_focused: bool,
+    was_window_focused: bool,
 
     /// Whether the unfocused window opacity button in the view menu was
     /// clicked. Necessary to close the menu, so the opacity can be
@@ -87,9 +85,8 @@ impl Overlay {
             logs_emitted: 0,
             frames_since_new_logs: 0,
             font_scale: 1.8,
-            is_compact_mode: false,
             unfocused_window_opacity: 0.4,
-            is_window_focused: false,
+            was_window_focused: false,
             was_unfocused_window_opacity_button_clicked: false,
         }
     }
@@ -143,7 +140,7 @@ impl Overlay {
 
         ui.popup("#unfocused-window-opacity-popup", || {
             // Force unfocused state while setting opacity to give immediate feedback.
-            self.is_window_focused = false;
+            self.was_window_focused = false;
 
             let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
             let _slider_width = ui.push_item_width(150. * self.font_scale);
@@ -180,10 +177,6 @@ impl Overlay {
             self.font_scale = (self.font_scale + 0.1).min(4.0);
         }
 
-        ui.text("Compact Mode");
-        ui.same_line();
-        ui.checkbox("##compact-mode-checkbox", &mut self.is_compact_mode);
-
         ui.text("Window Opacity (Unfocused)");
         ui.same_line();
         if ui.button("Change##unfocused-window-opacity-button") {
@@ -218,11 +211,11 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui) {
-        let scrollbar_bg_opacity = if self.is_window_focused { 1.0 } else { 0.0 };
+        let scrollbar_bg_opacity = if self.was_window_focused { 1.0 } else { 0.0 };
         let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
-        let input_height = if !self.is_compact_mode {
+        let input_height = if self.is_menu_open() {
             ui.frame_height_with_spacing().ceil()
         } else {
             0.0
@@ -232,7 +225,7 @@ impl Overlay {
             .size([0.0, -input_height])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(!self.is_compact_mode)
+            .horizontal_scrollbar(self.is_menu_open())
             .build(|| {
                 let core = self.core.lock().unwrap();
                 let logs = core.logs();
@@ -298,6 +291,19 @@ impl Overlay {
             }
         });
     }
+
+    /// Returns whether the player has the menu open and so can interact with
+    /// the overlay.
+    fn is_menu_open(&self) -> bool {
+        if let Ok(menu_man) = unsafe { MenuMan::instance() } {
+            // If MapItemMan isn't available, that usually means we're on the
+            // main menu. There's probably a better way to detect that but we
+            // don't know it yet.
+            menu_man.is_menu_mode() || unsafe { MapItemMan::instance() }.is_err()
+        } else {
+            false
+        }
+    }
 }
 
 impl ImguiRenderLoop for Overlay {
@@ -306,7 +312,7 @@ impl ImguiRenderLoop for Overlay {
             return;
         };
 
-        let window_opacity = if self.is_window_focused {
+        let window_opacity = if self.was_window_focused {
             1.0
         } else {
             self.unfocused_window_opacity
@@ -323,9 +329,6 @@ impl ImguiRenderLoop for Overlay {
             .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
             .menu_bar(true)
             .build(|| {
-                self.is_window_focused =
-                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-
                 ui.set_window_font_scale(self.font_scale);
 
                 self.render_unfocused_window_opacity_popup(ui);
@@ -333,10 +336,13 @@ impl ImguiRenderLoop for Overlay {
                 self.render_connection_widget(ui);
                 ui.separator();
                 self.render_log_window(ui);
-                if !self.is_compact_mode {
+                if self.is_menu_open() {
                     self.render_say_input(ui);
                 }
                 self.render_url_modal_popup(ui);
+
+                self.was_window_focused =
+                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
             });
 
         drop(_bg);
