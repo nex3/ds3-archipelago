@@ -1,6 +1,6 @@
 [package]
 name = "ds3-archipelago"
-version = "4.0.0-alpha.3"
+version = "4.0.0-alpha.6"
 edition = "2024"
 
 [lib]
@@ -9,7 +9,7 @@ name = "archipelago"
 
 [dependencies]
 anyhow = "1.0.100"
-archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "rich-message" }
+archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "refactor" }
 backtrace = "0.3.76"
 bincode = "2.0.1"
 chrono = "0.4.42"
@@ -26,12 +26,18 @@ mint = "0.5.9"
 pelite = "0.10"
 serde = { version = "1.0.228", features = ["derive"] }
 simplelog = "0.12.2"
-tokio = { version = "1.47", features = ["macros", "rt", "sync"] }
+tungstenite = "0.28.0"
+windows-result = "0.4.1"
 
 [dependencies.windows]
 version = "0.54"
 features = [
     "Win32_Foundation",
+    "Win32_System_ProcessStatus",
     "Win32_System_SystemServices",
     "Win32_UI_WindowsAndMessaging",
 ]
+
+[patch.crates-io]
+imgui = { git = "https://github.com/imgui-rs/imgui-rs" }
+imgui-sys = { git = "https://github.com/imgui-rs/imgui-rs" }

@@ -1,8 +1,48 @@
+## 4.0.0-alpha.7
+
+* Fix a bug where the game crashed when the Archipelago connection closed.
+
+## 4.0.0-alpha.6
+
+* Properly identify the mod directory under Proton.
+
+* Upgrade to a newer version of ME3 which should reduce enemy randomizer
+  crashes.
+
+* Improve a number of details of interaction with the Archipelago server.
+
+## 4.0.0-alpha.5
+
+* Fix a rare crash when obtaining weapons and/or armor.
+
+* Don't produce a bogus seed conflict error when loading a save, leaving it,
+  connecting, then starting a new file.
+
+* Properly remove foreign items from the inventory after distributing them.
+
+* Don't die because of our own death links.
+
+* Put logs in a `log/` directory rather than the root of the mod directory.
+
 ## 4.0.0-alpha.4
 
-* Fix the path to the ME3 config file in the `launch-ds3.sh` script for Linux.
+* Fix a bug where guaranteed enemy drops appear as placeholders when picked up.
+
+* Fix a bug where some items would have a synthetic copy appear in the inventory
+  when purchased from shops.
+
+* Fix a crash when purchasing an upgraded weapon from a shop.
+
+* Properly grant the Path of the Dragon gesture when it's received in the local
+  world.
 
 * Clarify the error message for a config version mismatch.
+
+### Linux/Proton
+
+* Properly locate the `apconfig.json` file on Linux.
+
+* Fix the path to the ME3 config file in the `launch-ds3.sh` script for Linux.
 
 ## 4.0.0-alpha.3
 

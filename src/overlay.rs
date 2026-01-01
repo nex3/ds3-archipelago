@@ -1,12 +1,13 @@
-use archipelago_rs::protocol::{RichMessageColor, RichMessagePart, RichPrint};
-use hudhook::RenderContext;
+use std::mem;
+use std::sync::{Arc, Mutex};
+
+use archipelago_rs::{self as ap, RichText, TextColor};
+use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 use imgui_sys::ImVec2;
 use log::*;
 
-use anyhow::Result;
-
-use crate::core::{Core, SimpleConnectionState};
+use crate::core::Core;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -26,7 +27,7 @@ const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 pub struct Overlay {
     /// The struct that manages the core mod logic that's not strictly
     /// UI-related.
-    core: Core,
+    core: Arc<Mutex<Core>>,
 
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
@@ -76,9 +77,9 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            core: Core::new()?,
+    pub fn new(core: Arc<Mutex<Core>>) -> Self {
+        Self {
+            core,
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
@@ -90,71 +91,7 @@ impl Overlay {
             unfocused_window_opacity: 0.8,
             is_window_focused: false,
             was_unfocused_window_opacity_button_clicked: false,
-        })
-    }
-
-    /// Like [ImguiRenderLoop.render], except that this can return a [Result] to
-    /// signal a fatal error.
-    ///
-    /// The [error] flag indicates whether this has experienced a fatal error
-    /// that it's in the process of displaying to the user.
-    pub fn render(&mut self, ui: &mut Ui, error: bool) -> Result<()> {
-        self.core.tick(error)?;
-
-        let Some(viewport_size) = self.viewport_size else {
-            return Ok(());
-        };
-
-        let window_opacity = if self.is_window_focused {
-            1.0
-        } else {
-            self.unfocused_window_opacity
-        };
-        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
-        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
-        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
-        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
-        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
-
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .menu_bar(true)
-            .build(|| {
-                self.is_window_focused =
-                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-
-                ui.set_window_font_scale(self.font_scale);
-
-                self.render_unfocused_window_opacity_popup(ui);
-                self.render_menu_bar(ui);
-                self.render_connection_widget(ui);
-                ui.separator();
-                self.render_log_window(ui);
-                if !self.is_compact_mode {
-                    self.render_say_input(ui);
-                }
-                self.render_url_modal_popup(ui);
-            });
-
-        drop(_bg);
-        drop(_menu_bg);
-
-        Ok(())
-    }
-
-    /// Like [ImguiRenderLoop.before_render].
-    pub fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
+        }
     }
 
     /// Renders the modal popup which queries the player for connection
@@ -165,7 +102,6 @@ impl Overlay {
             .collapsible(false)
             .resizable(false)
             .always_auto_resize(true)
-            .always_use_window_padding(true)
             .build(|| {
                 {
                     let _ = ui.push_item_width(500. * self.font_scale);
@@ -178,7 +114,7 @@ impl Overlay {
                 ui.disabled(self.popup_url.is_empty(), || {
                     if ui.button("Connect") {
                         ui.close_current_popup();
-                        if let Err(e) = self.core.update_url(&self.popup_url) {
+                        if let Err(e) = self.core.lock().unwrap().update_url(&self.popup_url) {
                             error!("Failed to save config: {e}");
                         }
                     }
@@ -261,19 +197,20 @@ impl Overlay {
     fn render_connection_widget(&mut self, ui: &Ui) {
         ui.text("Connection status:");
         ui.same_line();
-        match self.core.simple_connection_state() {
-            SimpleConnectionState::Connected => {
+        let core = self.core.lock().unwrap();
+        match core.connection_state_type() {
+            ap::ConnectionStateType::Connected => {
                 ui.text_colored(GREEN.to_rgba_f32s(), "Connected");
             }
-            SimpleConnectionState::Connecting => {
+            ap::ConnectionStateType::Connecting => {
                 ui.text_colored(BLUE.to_rgba_f32s(), "Connecting...");
             }
-            SimpleConnectionState::Disconnected => {
+            ap::ConnectionStateType::Disconnected => {
                 bold_text_colored(ui, "Disconnected", RED.to_rgba_f32s());
                 ui.same_line();
                 if ui.button("Change URL") {
                     ui.open_popup("#url-modal-popup");
-                    self.core.config().url().clone_into(&mut self.popup_url);
+                    core.config().url().clone_into(&mut self.popup_url);
                 }
             }
         }
@@ -297,14 +234,15 @@ impl Overlay {
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(!self.is_compact_mode)
             .build(|| {
-                let logs = self.core.logs();
+                let core = self.core.lock().unwrap();
+                let logs = core.logs();
                 if logs.len() != self.logs_emitted {
                     self.frames_since_new_logs = 0;
                     self.logs_emitted = logs.len();
                 }
 
                 for message in logs {
-                    use RichPrint::*;
+                    use ap::Print::*;
                     write_message_data(
                         ui,
                         message.data(),
@@ -316,10 +254,9 @@ impl Overlay {
                             | CommandResult { .. }
                             | AdminCommandResult { .. }
                             | Unknown { .. } => 0xff,
-                            ItemSend { receiving, .. }
-                            | ItemCheat { receiving, .. }
-                            | Hint { receiving, .. }
-                                if self.core.slot().is_some_and(|s| *receiving == s) =>
+                            ItemSend { item, .. } | ItemCheat { item, .. } | Hint { item, .. }
+                                if core.config().slot() == item.receiver().name()
+                                    || core.config().slot() == item.sender().name() =>
                             {
                                 0xFF
                             }
@@ -338,7 +275,8 @@ impl Overlay {
 
     /// Renders the text box in which users can write chats to the server.
     fn render_say_input(&mut self, ui: &Ui) {
-        ui.disabled(self.core.client().is_none(), || {
+        let mut core = self.core.lock().unwrap();
+        ui.disabled(core.client().is_none(), || {
             let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
             let style = ui.clone_style();
             let spacing = style.item_spacing[0] * self.font_scale * 0.7;
@@ -353,11 +291,68 @@ impl Overlay {
             ui.same_line_with_spacing(0.0, spacing);
             send = ui.arrow_button("##say-button", Direction::Right) || send;
 
-            if send && let Some(client) = self.core.client() {
-                client.say(&self.say_input);
-                self.say_input.clear();
+            if send && let Some(client) = core.client_mut() {
+                // We don't have a great way to surface these errors, and
+                // they're non-fatal, so just ignore them.
+                let _ = client.say(mem::take(&mut self.say_input));
             }
         });
+    }
+}
+
+impl ImguiRenderLoop for Overlay {
+    fn render(&mut self, ui: &mut Ui) {
+        let Some(viewport_size) = self.viewport_size else {
+            return;
+        };
+
+        let window_opacity = if self.is_window_focused {
+            1.0
+        } else {
+            self.unfocused_window_opacity
+        };
+        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
+        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
+        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
+        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
+
+        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
+            .menu_bar(true)
+            .build(|| {
+                self.is_window_focused =
+                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+
+                ui.set_window_font_scale(self.font_scale);
+
+                self.render_unfocused_window_opacity_popup(ui);
+                self.render_menu_bar(ui);
+                self.render_connection_widget(ui);
+                ui.separator();
+                self.render_log_window(ui);
+                if !self.is_compact_mode {
+                    self.render_say_input(ui);
+                }
+                self.render_url_modal_popup(ui);
+            });
+
+        drop(_bg);
+        drop(_menu_bg);
+    }
+
+    fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
     }
 }
 
@@ -373,7 +368,7 @@ impl ImColor32Ext for ImColor32 {
 }
 
 /// Writes the text in [parts] to [ui] in a single line.
-fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
+fn write_message_data(ui: &Ui, parts: &[RichText], alpha: u8) {
     let mut first = true;
     for part in parts {
         if !first {
@@ -384,15 +379,12 @@ fn write_message_data(ui: &Ui, parts: &[RichMessagePart], alpha: u8) {
         // TODO: Load in fonts to support bold, maybe write a line manually for
         // underline? I'm not sure there's a reasonable way to support
         // background colors.
-        use RichMessageColor::*;
-        use RichMessagePart::*;
+        use RichText::*;
+        use TextColor::*;
         let color = match part {
-            PlayerId { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
-            ItemId { .. } | ItemName { .. } | Color { color: Magenta, .. } => MAGENTA,
-            LocationId { .. }
-            | LocationName { .. }
-            | EntranceName { .. }
-            | Color { color: Cyan, .. } => CYAN,
+            Player { .. } | PlayerName { .. } | Color { color: Blue, .. } => BLUE,
+            Item { .. } | Color { color: Magenta, .. } => MAGENTA,
+            Location { .. } | EntranceName { .. } | Color { color: Cyan, .. } => CYAN,
             Color { color: Black, .. } => BLACK,
             Color { color: Red, .. } => RED,
             Color { color: Green, .. } => GREEN,

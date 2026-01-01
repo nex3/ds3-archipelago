@@ -25,7 +25,7 @@ const CONFIG: bincode::config::Configuration = bincode::config::standard();
 pub struct SaveData {
     /// The number of Archipelago items that have been granted to this player
     /// from foreign games throughout the course of this run.
-    pub items_granted: u64,
+    pub items_granted: usize,
 
     /// The set of Archipelago locations that this player has accessed so far in
     /// this game. We don't strictly need to track this, but it helps us avoid
@@ -61,9 +61,12 @@ impl SaveData {
                     SavedData(bytes) => bytes,
                     MainMenu => {
                         // If the player goes back to the main menu, reset the
-                        // granted items so that if the user starts a new file
-                        // they get all new items.
-                        INSTANCE.write().unwrap().items_granted = 0;
+                        // granted items and seed info so that if the user
+                        // starts a new file they get all new items and no seed
+                        // conflict.
+                        let mut save = INSTANCE.write().unwrap();
+                        save.items_granted = 0;
+                        save.seed = None;
                         return;
                     }
                     _ => return,

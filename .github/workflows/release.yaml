@@ -149,8 +149,8 @@ jobs:
 
     - name: Download ModEngine3
       run: |
-        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-windows-amd64.zip > me3-windows.zip
-        curl -L https://github.com/garyttierney/me3/releases/download/v0.9.0/me3-linux-amd64.tar.gz > me3-linux.tar.gz
+        curl -L https://github.com/garyttierney/me3/releases/download/v0.10.1/me3-windows-amd64.zip > me3-windows.zip
+        curl -L https://github.com/garyttierney/me3/releases/download/v0.10.1/me3-linux-amd64.tar.gz > me3-linux.tar.gz
 
     - run: unzip -d me3-windows me3-windows.zip
 
