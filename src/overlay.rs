@@ -61,6 +61,10 @@ pub struct Overlay {
     /// Whether the overlay window was focused in the previous frame.
     was_window_focused: bool,
 
+    was_menu_open: bool,
+
+    previous_size: Option<[f32; 2]>,
+
     /// Whether the unfocused window opacity button in the view menu was
     /// clicked. Necessary to close the menu, so the opacity can be
     /// adjusted without the menu overlapping the window.
@@ -87,6 +91,8 @@ impl Overlay {
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
             was_window_focused: false,
+            was_menu_open: false,
+            previous_size: None,
             was_unfocused_window_opacity_button_clicked: false,
         }
     }
@@ -323,27 +329,38 @@ impl ImguiRenderLoop for Overlay {
         bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
         let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
 
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+        let mut builder = ui
+            .window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
             .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .menu_bar(true)
-            .build(|| {
-                ui.set_window_font_scale(self.font_scale);
+            .menu_bar(true);
 
-                self.render_unfocused_window_opacity_popup(ui);
-                self.render_menu_bar(ui);
-                self.render_connection_widget(ui);
-                ui.separator();
-                self.render_log_window(ui);
-                if self.is_menu_open() {
-                    self.render_say_input(ui);
-                }
-                self.render_url_modal_popup(ui);
+        // When the menu opens or closes, add or remove space from the bottom of
+        // the overlay for the message bar and horizontal scrollbar.
+        builder = match (self.previous_size, self.is_menu_open(), self.was_menu_open) {
+            (Some(size), true, false) => builder.size([size[0], size[1] + 50.], Condition::Always),
+            (Some(size), false, true) => builder.size([size[0], size[1] - 50.], Condition::Always),
+            _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
+        };
 
-                self.was_window_focused =
-                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            });
+        builder.build(|| {
+            ui.set_window_font_scale(self.font_scale);
+
+            self.render_unfocused_window_opacity_popup(ui);
+            self.render_menu_bar(ui);
+            self.render_connection_widget(ui);
+            ui.separator();
+            self.render_log_window(ui);
+            if self.is_menu_open() {
+                self.render_say_input(ui);
+            }
+            self.render_url_modal_popup(ui);
+
+            self.was_window_focused =
+                ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.was_menu_open = self.is_menu_open();
+            self.previous_size = Some(ui.window_size());
+        });
 
         drop(_bg);
         drop(_menu_bg);
