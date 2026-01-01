@@ -109,14 +109,32 @@ impl Core {
         self.connection.state_type()
     }
 
+    /// Returns whether the current connection is disconnected.
+    pub fn is_disconnected(&self) -> bool {
+        self.connection.is_disconnected()
+    }
+
     /// Returns the current user config.
     pub fn config(&self) -> &Config {
         &self.config
     }
 
+    /// Retries the Archipelago connection with the same information.
+    pub fn reconnect(&mut self) {
+        if self.connection_state_type() == ap::ConnectionStateType::Disconnected {
+            self.log("Reconnecting...");
+        }
+
+        self.connection = Self::new_connection(&self.config);
+    }
+
     /// Updates the URL to use to connect to Archipelago and reconnects the
     /// Archipelago session.
     pub fn update_url(&mut self, url: impl AsRef<str>) -> Result<()> {
+        if self.connection_state_type() == ap::ConnectionStateType::Disconnected {
+            self.log("Reconnecting...");
+        }
+
         self.config.set_url(url);
         self.config.save()?;
         self.connection = Self::new_connection(&self.config);
@@ -181,13 +199,31 @@ impl Core {
                         if matches!(err, ap::Error::WebSocket(tungstenite::Error::Io(io))
                                          if io.kind() == io::ErrorKind::ConnectionRefused)
                         {
-                            "Connection refused. Make sure the server session is running and the \
-                             URL is up-to-date."
-                                .into()
+                            vec![
+                                ap::RichText::Color {
+                                    text: "Connection refused. ".into(),
+                                    color: ap::TextColor::Red,
+                                },
+                                "Make sure the server session is running and the URL is \
+                                 up-to-date."
+                                    .into(),
+                            ]
                         } else if state == ap::ConnectionStateType::Connected {
-                            format!("Connection failed: {}", err)
+                            vec![
+                                ap::RichText::Color {
+                                    text: "Connection failed: ".into(),
+                                    color: ap::TextColor::Red,
+                                },
+                                err.to_string().into(),
+                            ]
                         } else {
-                            format!("Disconnected: {}", err)
+                            vec![
+                                ap::RichText::Color {
+                                    text: "Disconnected: ".into(),
+                                    color: ap::TextColor::Red,
+                                },
+                                err.to_string().into(),
+                            ]
                         },
                     );
                     self.event_buffer.clear();
@@ -571,12 +607,11 @@ impl Core {
 
     /// Writes a message to the log buffer that we display to the user in the
     /// overlay, as well as to the internal logger.
-    fn log(&mut self, message: impl AsRef<str>) {
-        let message_ref = message.as_ref();
-        info!("[APC] {message_ref}");
+    fn log(&mut self, message: impl Into<ap::Print>) {
+        let print = message.into();
+        info!("[APC] {print}");
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
-        self.log_buffer
-            .push(ap::Print::message(message_ref.to_string()));
+        self.log_buffer.push(print);
     }
 }
