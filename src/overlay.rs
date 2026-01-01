@@ -5,7 +5,6 @@ use darksouls3::sprj::{MapItemMan, MenuMan};
 use fromsoftware_shared::FromStatic;
 use hudhook::RenderContext;
 use imgui::*;
-use imgui_sys::ImVec2;
 use log::*;
 
 use crate::core::Core;
@@ -50,6 +49,9 @@ pub struct Overlay {
     /// The unfocused window opacity for the overlay UI.
     unfocused_window_opacity: f32,
 
+    /// Whether the settings window is currently visible.
+    settings_window_visible: bool,
+
     /// Whether the overlay window was focused in the previous frame.
     was_window_focused: bool,
 
@@ -59,11 +61,6 @@ pub struct Overlay {
     /// The size of the main overlay window in the previous frame. Used to
     /// resize when entering and exiting compact mode.
     previous_size: Option<[f32; 2]>,
-
-    /// Whether the unfocused window opacity button in the view menu was
-    /// clicked. Necessary to close the menu, so the opacity can be
-    /// adjusted without the menu overlapping the window.
-    was_unfocused_window_opacity_button_clicked: bool,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -84,10 +81,10 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
+            settings_window_visible: false,
             was_window_focused: false,
             was_compact_mode: true,
             previous_size: None,
-            was_unfocused_window_opacity_button_clicked: false,
         }
     }
 
@@ -96,6 +93,26 @@ impl Overlay {
     /// We don't store `core` directly in the overlay so that we can ensure that
     /// its mutex is only locked once per render.
     pub fn render(&mut self, ui: &mut Ui, core: &mut Core) {
+        self.render_main_window(ui, core);
+        self.render_settings_window(ui);
+    }
+
+    /// See [ImguiRenderLoop::before_render], but takes a reference to [Core] as
+    /// well.
+    pub fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
+    }
+
+    /// Render the primary overlay window and any popups it opens.
+    fn render_main_window(&mut self, ui: &Ui, core: &mut Core) {
         let Some(viewport_size) = self.viewport_size else {
             return;
         };
@@ -137,7 +154,6 @@ impl Overlay {
         builder.build(|| {
             ui.set_window_font_scale(self.font_scale);
 
-            self.render_unfocused_window_opacity_popup(ui);
             self.render_menu_bar(ui);
             ui.separator();
             self.render_log_window(ui, core);
@@ -155,23 +171,6 @@ impl Overlay {
             self.was_compact_mode = is_compact_mode;
             self.previous_size = Some(ui.window_size());
         });
-
-        drop(_bg);
-        drop(_menu_bg);
-    }
-
-    /// See [ImguiRenderLoop::before_render], but takes a reference to [Core] as
-    /// well.
-    pub fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
     }
 
     /// Renders the modal popup which queries the player for connection
@@ -202,70 +201,49 @@ impl Overlay {
             });
     }
 
-    /// Renders the popup which allows the user to set the unfocused window opacity.
-    fn render_unfocused_window_opacity_popup(&mut self, ui: &Ui) {
-        if self.was_unfocused_window_opacity_button_clicked {
-            ui.open_popup("#unfocused-window-opacity-popup");
-            self.was_unfocused_window_opacity_button_clicked = false;
-
-            if let Some(viewport_size) = self.viewport_size {
-                let center_x = viewport_size[0] / 2.0;
-                let center_y = viewport_size[1] / 2.0;
-                unsafe {
-                    sys::igSetNextWindowPos(
-                        ImVec2::new(center_x, center_y),
-                        Condition::Appearing as i32,
-                        ImVec2::new(0.5, 0.5),
-                    );
-                }
-            }
-        }
-
-        ui.popup("#unfocused-window-opacity-popup", || {
-            // Force unfocused state while setting opacity to give immediate feedback.
-            self.was_window_focused = false;
-
-            let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
-            let _slider_width = ui.push_item_width(150. * self.font_scale);
-            ui.slider_config("Window Opacity (Unfocused)", 0, 100)
-                .display_format("%d%%")
-                .build(&mut opacity_percent);
-            drop(_slider_width);
-            self.unfocused_window_opacity = (opacity_percent as f32) / 100.0;
-
-            if ui.button("Close") {
-                ui.close_current_popup();
-            }
-        });
-    }
-
     /// Renders the menu bar.
     fn render_menu_bar(&mut self, ui: &Ui) {
         ui.menu_bar(|| {
-            ui.menu("View", || {
-                self.render_view_menu(ui);
-            });
+            if ui.menu_item("Settings") {
+                log::warn!("Click registered");
+                self.settings_window_visible = true;
+            }
         });
     }
 
-    /// Renders the view menu.
-    fn render_view_menu(&mut self, ui: &Ui) {
-        ui.text("Font Size");
-        ui.same_line();
-        if ui.button("-##font-size-decrease-button") {
-            self.font_scale = (self.font_scale - 0.1).max(0.5);
-        }
-        ui.same_line();
-        if ui.button("+##font-size-increase-button") {
-            self.font_scale = (self.font_scale + 0.1).min(4.0);
+    /// Renders the settings popup.
+    fn render_settings_window(&mut self, ui: &Ui) {
+        if !self.settings_window_visible {
+            return;
         }
 
-        ui.text("Window Opacity (Unfocused)");
-        ui.same_line();
-        if ui.button("Change##unfocused-window-opacity-button") {
-            ui.close_current_popup();
-            self.was_unfocused_window_opacity_button_clicked = true;
-        }
+        ui.window("Archipelago Settings")
+            .position_pivot([0.5, 0.5])
+            .collapsible(false)
+            .build(|| {
+                ui.set_window_font_scale(self.font_scale);
+
+                ui.text("Font Size ");
+                ui.same_line();
+                if ui.button("-##font-size-decrease-button") {
+                    self.font_scale = (self.font_scale - 0.1).max(0.5);
+                }
+                ui.same_line();
+                if ui.button("+##font-size-increase-button") {
+                    self.font_scale = (self.font_scale + 0.1).min(4.0);
+                }
+
+                let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
+                let _slider_width = ui.push_item_width(150. * self.font_scale);
+                ui.slider_config("Unfocused Opacity", 0, 100)
+                    .display_format("%d%%")
+                    .build(&mut opacity_percent);
+                self.unfocused_window_opacity = (opacity_percent as f32) / 100.0;
+
+                if ui.button("Ok") {
+                    self.settings_window_visible = false;
+                }
+            });
     }
 
     /// Renders the buttons that allow the player to reconnect to Archipelago.
@@ -335,8 +313,6 @@ impl Overlay {
                 }
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
-
-        drop(_scrollbar_bg);
     }
 
     /// Renders the text box in which users can write chats to the server.
