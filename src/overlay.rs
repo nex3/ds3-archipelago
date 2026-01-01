@@ -1,8 +1,7 @@
 use std::mem;
-use std::sync::{Arc, Mutex};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
-use hudhook::{ImguiRenderLoop, RenderContext};
+use hudhook::RenderContext;
 use imgui::*;
 use log::*;
 
@@ -21,14 +20,7 @@ const MAGENTA: ImColor32 = ImColor32::from_rgb(0xBF, 0x9B, 0xBC);
 const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 
 /// The visual overlay that appears on top of the game.
-///
-/// Because this is driver of the event loop and of user interaction, it owns
-/// the mod itself.
 pub struct Overlay {
-    /// The struct that manages the core mod logic that's not strictly
-    /// UI-related.
-    core: Arc<Mutex<Core>>,
-
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
@@ -59,9 +51,8 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new(core: Arc<Mutex<Core>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            core,
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
@@ -71,9 +62,47 @@ impl Overlay {
         }
     }
 
+    /// Like [ImguiRenderLoop::render], but takes a reference to [Core] as well.
+    ///
+    /// We don't store `core` directly in the overlay so that we can ensure that
+    /// its mutex is only locked once per render.
+    pub fn render(&mut self, ui: &mut Ui, core: &mut Core) {
+        let Some(viewport_size) = self.viewport_size else {
+            return;
+        };
+
+        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
+            .build(|| {
+                ui.set_window_font_scale(1.8);
+
+                self.render_connection_widget(ui, core);
+                ui.separator();
+                self.render_log_window(ui, core);
+                self.render_say_input(ui, core);
+                self.render_url_popup(ui, core);
+            });
+    }
+
+    /// See [ImguiRenderLoop::before_render], but takes a reference to [Core] as
+    /// well.
+    pub fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
+    }
+
     /// Renders the modal popup which queries the player for connection
     /// information.
-    fn render_url_popup(&mut self, ui: &Ui) {
+    fn render_url_popup(&mut self, ui: &Ui, core: &mut Core) {
         ui.modal_popup_config("#url-popup")
             .title_bar(false)
             .collapsible(false)
@@ -91,7 +120,7 @@ impl Overlay {
                 ui.disabled(self.popup_url.is_empty(), || {
                     if ui.button("Connect") {
                         ui.close_current_popup();
-                        if let Err(e) = self.core.lock().unwrap().update_url(&self.popup_url) {
+                        if let Err(e) = core.update_url(&self.popup_url) {
                             error!("Failed to save config: {e}");
                         }
                     }
@@ -101,10 +130,9 @@ impl Overlay {
 
     /// Renders the widget that displays the current connection status and
     /// allows the player to reconnect to Archipelago.
-    fn render_connection_widget(&mut self, ui: &Ui) {
+    fn render_connection_widget(&mut self, ui: &Ui, core: &Core) {
         ui.text("Connection status:");
         ui.same_line();
-        let core = self.core.lock().unwrap();
         match core.connection_state_type() {
             ap::ConnectionStateType::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
             ap::ConnectionStateType::Connecting => ui.text("Connecting..."),
@@ -120,14 +148,13 @@ impl Overlay {
     }
 
     /// Renders the log window which displays all the prints sent from the server.
-    fn render_log_window(&mut self, ui: &Ui) {
+    fn render_log_window(&mut self, ui: &Ui, core: &Core) {
         ui.child_window("#log")
             .size([0.0, -33.])
             .draw_background(false)
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(true)
             .build(|| {
-                let core = self.core.lock().unwrap();
                 let logs = core.logs();
                 if logs.len() != self.logs_emitted {
                     self.frames_since_new_logs = 0;
@@ -165,8 +192,7 @@ impl Overlay {
     }
 
     /// Renders the text box in which users can write chats to the server.
-    fn render_say_input(&mut self, ui: &Ui) {
-        let mut core = self.core.lock().unwrap();
+    fn render_say_input(&mut self, ui: &Ui, core: &mut Core) {
         ui.disabled(core.client().is_none(), || {
             let width = ui.push_item_width(-40.);
             let mut send = ui
@@ -186,40 +212,6 @@ impl Overlay {
                 let _ = client.say(mem::take(&mut self.say_input));
             }
         });
-    }
-}
-
-impl ImguiRenderLoop for Overlay {
-    fn render(&mut self, ui: &mut Ui) {
-        let Some(viewport_size) = self.viewport_size else {
-            return;
-        };
-
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .build(|| {
-                ui.set_window_font_scale(1.8);
-
-                self.render_connection_widget(ui);
-                ui.separator();
-                self.render_log_window(ui);
-                self.render_say_input(ui);
-                self.render_url_popup(ui);
-            });
-    }
-
-    fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
     }
 }
 
