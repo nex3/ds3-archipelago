@@ -53,8 +53,11 @@ pub struct Overlay {
     /// Whether the overlay window was focused in the previous frame.
     was_window_focused: bool,
 
-    was_menu_open: bool,
+    /// Whether compact mode was enabled in the previous frame.
+    was_compact_mode: bool,
 
+    /// The size of the main overlay window in the previous frame. Used to
+    /// resize when entering and exiting compact mode.
     previous_size: Option<[f32; 2]>,
 
     /// Whether the unfocused window opacity button in the view menu was
@@ -82,7 +85,7 @@ impl Overlay {
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
             was_window_focused: false,
-            was_menu_open: false,
+            was_compact_mode: true,
             previous_size: None,
             was_unfocused_window_opacity_button_clicked: false,
         }
@@ -109,16 +112,25 @@ impl Overlay {
         let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
 
         let mut builder = ui
-            .window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .window(format!(
+                "Archipelago Client {} [{}]###ap-client-overlay",
+                env!("CARGO_PKG_VERSION"),
+                match core.connection_state_type() {
+                    ap::ConnectionStateType::Connected => "Connected",
+                    ap::ConnectionStateType::Connecting => "Connecting...",
+                    ap::ConnectionStateType::Disconnected => "Disconnected",
+                }
+            ))
             .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
             .position_pivot([1., 0.])
             .menu_bar(true);
 
         // When the menu opens or closes, add or remove space from the bottom of
         // the overlay for the message bar and horizontal scrollbar.
-        builder = match (self.previous_size, self.is_menu_open(), self.was_menu_open) {
-            (Some(size), true, false) => builder.size([size[0], size[1] + 50.], Condition::Always),
-            (Some(size), false, true) => builder.size([size[0], size[1] - 50.], Condition::Always),
+        let is_compact_mode = self.is_compact_mode(core);
+        builder = match (self.previous_size, is_compact_mode, self.was_compact_mode) {
+            (Some(size), true, false) => builder.size([size[0], size[1] - 50.], Condition::Always),
+            (Some(size), false, true) => builder.size([size[0], size[1] + 50.], Condition::Always),
             _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
         };
 
@@ -127,17 +139,20 @@ impl Overlay {
 
             self.render_unfocused_window_opacity_popup(ui);
             self.render_menu_bar(ui);
-            self.render_connection_widget(ui, core);
             ui.separator();
             self.render_log_window(ui, core);
-            if self.is_menu_open() {
-                self.render_say_input(ui, core);
+            if !is_compact_mode {
+                if core.is_disconnected() {
+                    self.render_connection_buttons(ui, core);
+                } else {
+                    self.render_say_input(ui, core);
+                }
             }
             self.render_url_modal_popup(ui, core);
 
             self.was_window_focused =
                 ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            self.was_menu_open = self.is_menu_open();
+            self.was_compact_mode = is_compact_mode;
             self.previous_size = Some(ui.window_size());
         });
 
@@ -253,26 +268,17 @@ impl Overlay {
         }
     }
 
-    /// Renders the widget that displays the current connection status and
-    /// allows the player to reconnect to Archipelago.
-    fn render_connection_widget(&mut self, ui: &Ui, core: &Core) {
-        ui.text("Connection status:");
+    /// Renders the buttons that allow the player to reconnect to Archipelago.
+    /// These take the place of the text box when the client is disconnected.
+    fn render_connection_buttons(&mut self, ui: &Ui, core: &mut Core) {
+        if ui.button("Reconnect") {
+            core.reconnect();
+        }
+
         ui.same_line();
-        match core.connection_state_type() {
-            ap::ConnectionStateType::Connected => {
-                ui.text_colored(GREEN.to_rgba_f32s(), "Connected");
-            }
-            ap::ConnectionStateType::Connecting => {
-                ui.text_colored(BLUE.to_rgba_f32s(), "Connecting...");
-            }
-            ap::ConnectionStateType::Disconnected => {
-                bold_text_colored(ui, "Disconnected", RED.to_rgba_f32s());
-                ui.same_line();
-                if ui.button("Change URL") {
-                    ui.open_popup("#url-modal-popup");
-                    core.config().url().clone_into(&mut self.popup_url);
-                }
-            }
+        if ui.button("Change URL") {
+            ui.open_popup("#url-modal-popup");
+            core.config().url().clone_into(&mut self.popup_url);
         }
     }
 
@@ -282,7 +288,8 @@ impl Overlay {
         let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
-        let input_height = if self.is_menu_open() {
+        let is_compact_mode = self.is_compact_mode(core);
+        let input_height = if !is_compact_mode {
             ui.frame_height_with_spacing().ceil()
         } else {
             0.0
@@ -292,7 +299,7 @@ impl Overlay {
             .size([0.0, -input_height])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(self.is_menu_open())
+            .horizontal_scrollbar(!is_compact_mode)
             .build(|| {
                 let logs = core.logs();
                 if logs.len() != self.logs_emitted {
@@ -357,16 +364,20 @@ impl Overlay {
         });
     }
 
-    /// Returns whether the player has the menu open and so can interact with
-    /// the overlay.
-    fn is_menu_open(&self) -> bool {
-        if let Ok(menu_man) = unsafe { MenuMan::instance() } {
+    /// Returns whether the overlay is currently in "compact mode", where the
+    /// bottommost widgets are not rendered.
+    fn is_compact_mode(&self, core: &Core) -> bool {
+        if core.is_disconnected() {
+            // When the connection is inactive, always show the buttons to
+            // reconnect.
+            false
+        } else if let Ok(menu_man) = unsafe { MenuMan::instance() } {
             // If MapItemMan isn't available, that usually means we're on the
             // main menu. There's probably a better way to detect that but we
             // don't know it yet.
-            menu_man.is_menu_mode() || unsafe { MapItemMan::instance() }.is_err()
+            !menu_man.is_menu_mode() && !unsafe { MapItemMan::instance() }.is_err()
         } else {
-            false
+            true
         }
     }
 }
@@ -407,15 +418,5 @@ fn write_message_data(ui: &Ui, parts: &[RichText], alpha: u8) {
             _ => WHITE,
         };
         ui.text_colored(color.with_alpha(alpha).to_rgba_f32s(), part.to_string());
-    }
-}
-
-/// Renders bold colored text by drawing it multiple times with 1px offset.
-/// TODO: Use ImGui font loading to support proper bold rendering.
-fn bold_text_colored(ui: &Ui, text: &str, color: [f32; 4]) {
-    let pos = ui.cursor_pos();
-    for i in 0..3 {
-        ui.set_cursor_pos([pos[0] + i as f32, pos[1]]);
-        ui.text_colored(color, text);
     }
 }
