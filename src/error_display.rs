@@ -40,7 +40,7 @@ impl ErrorDisplay {
         match core {
             Ok(core) => Self {
                 input_blocker,
-                overlay: Some(Overlay::new(core.clone())),
+                overlay: Some(Overlay::new()),
                 core: Some(core),
                 error: None,
                 show_full_error: false,
@@ -73,14 +73,15 @@ impl ImguiRenderLoop for ErrorDisplay {
         }
         self.input_blocker.block_only(flag);
 
-        if let Some(overlay) = &mut self.overlay {
-            overlay.render(ui);
-        }
+        if let Some(core) = &mut self.core {
+            let mut core = core.lock().unwrap();
+            if let Some(overlay) = &mut self.overlay {
+                overlay.render(ui, &mut core);
+            }
 
-        if self.error.is_none()
-            && let Some(core) = &self.core
-        {
-            self.error = core.lock().unwrap().take_error();
+            if self.error.is_none() {
+                self.error = core.take_error();
+            }
         }
 
         let Some(error) = &self.error else { return };

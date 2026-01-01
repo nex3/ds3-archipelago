@@ -1,10 +1,9 @@
 use std::mem;
-use std::sync::{Arc, Mutex};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
 use darksouls3::sprj::{MapItemMan, MenuMan};
 use fromsoftware_shared::FromStatic;
-use hudhook::{ImguiRenderLoop, RenderContext};
+use hudhook::RenderContext;
 use imgui::*;
 use imgui_sys::ImVec2;
 use log::*;
@@ -23,14 +22,7 @@ const MAGENTA: ImColor32 = ImColor32::from_rgb(0xBF, 0x9B, 0xBC);
 const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 
 /// The visual overlay that appears on top of the game.
-///
-/// Because this is driver of the event loop and of user interaction, it owns
-/// the mod itself.
 pub struct Overlay {
-    /// The struct that manages the core mod logic that's not strictly
-    /// UI-related.
-    core: Arc<Mutex<Core>>,
-
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
     viewport_size: Option<[f32; 2]>,
@@ -79,9 +71,8 @@ unsafe impl Sync for Overlay {}
 
 impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
-    pub fn new(core: Arc<Mutex<Core>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            core,
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
@@ -97,9 +88,80 @@ impl Overlay {
         }
     }
 
+    /// Like [ImguiRenderLoop::render], but takes a reference to [Core] as well.
+    ///
+    /// We don't store `core` directly in the overlay so that we can ensure that
+    /// its mutex is only locked once per render.
+    pub fn render(&mut self, ui: &mut Ui, core: &mut Core) {
+        let Some(viewport_size) = self.viewport_size else {
+            return;
+        };
+
+        let window_opacity = if self.was_window_focused {
+            1.0
+        } else {
+            self.unfocused_window_opacity
+        };
+        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
+        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
+        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
+        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
+
+        let mut builder = ui
+            .window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .menu_bar(true);
+
+        // When the menu opens or closes, add or remove space from the bottom of
+        // the overlay for the message bar and horizontal scrollbar.
+        builder = match (self.previous_size, self.is_menu_open(), self.was_menu_open) {
+            (Some(size), true, false) => builder.size([size[0], size[1] + 50.], Condition::Always),
+            (Some(size), false, true) => builder.size([size[0], size[1] - 50.], Condition::Always),
+            _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
+        };
+
+        builder.build(|| {
+            ui.set_window_font_scale(self.font_scale);
+
+            self.render_unfocused_window_opacity_popup(ui);
+            self.render_menu_bar(ui);
+            self.render_connection_widget(ui, core);
+            ui.separator();
+            self.render_log_window(ui, core);
+            if self.is_menu_open() {
+                self.render_say_input(ui, core);
+            }
+            self.render_url_modal_popup(ui, core);
+
+            self.was_window_focused =
+                ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.was_menu_open = self.is_menu_open();
+            self.previous_size = Some(ui.window_size());
+        });
+
+        drop(_bg);
+        drop(_menu_bg);
+    }
+
+    /// See [ImguiRenderLoop::before_render], but takes a reference to [Core] as
+    /// well.
+    pub fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
+        self.frames_since_new_logs += 1;
+        self.viewport_size = match ctx.main_viewport().size {
+            [0., 0.] => None,
+            size => Some(size),
+        };
+    }
+
     /// Renders the modal popup which queries the player for connection
     /// information.
-    fn render_url_modal_popup(&mut self, ui: &Ui) {
+    fn render_url_modal_popup(&mut self, ui: &Ui, core: &mut Core) {
         ui.modal_popup_config("#url-modal-popup")
             .title_bar(false)
             .collapsible(false)
@@ -117,7 +179,7 @@ impl Overlay {
                 ui.disabled(self.popup_url.is_empty(), || {
                     if ui.button("Connect") {
                         ui.close_current_popup();
-                        if let Err(e) = self.core.lock().unwrap().update_url(&self.popup_url) {
+                        if let Err(e) = core.update_url(&self.popup_url) {
                             error!("Failed to save config: {e}");
                         }
                     }
@@ -193,10 +255,9 @@ impl Overlay {
 
     /// Renders the widget that displays the current connection status and
     /// allows the player to reconnect to Archipelago.
-    fn render_connection_widget(&mut self, ui: &Ui) {
+    fn render_connection_widget(&mut self, ui: &Ui, core: &Core) {
         ui.text("Connection status:");
         ui.same_line();
-        let core = self.core.lock().unwrap();
         match core.connection_state_type() {
             ap::ConnectionStateType::Connected => {
                 ui.text_colored(GREEN.to_rgba_f32s(), "Connected");
@@ -216,7 +277,7 @@ impl Overlay {
     }
 
     /// Renders the log window which displays all the prints sent from the server.
-    fn render_log_window(&mut self, ui: &Ui) {
+    fn render_log_window(&mut self, ui: &Ui, core: &Core) {
         let scrollbar_bg_opacity = if self.was_window_focused { 1.0 } else { 0.0 };
         let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
@@ -233,7 +294,6 @@ impl Overlay {
             .always_vertical_scrollbar(true)
             .horizontal_scrollbar(self.is_menu_open())
             .build(|| {
-                let core = self.core.lock().unwrap();
                 let logs = core.logs();
                 if logs.len() != self.logs_emitted {
                     self.frames_since_new_logs = 0;
@@ -273,8 +333,7 @@ impl Overlay {
     }
 
     /// Renders the text box in which users can write chats to the server.
-    fn render_say_input(&mut self, ui: &Ui) {
-        let mut core = self.core.lock().unwrap();
+    fn render_say_input(&mut self, ui: &Ui, core: &mut Core) {
         ui.disabled(core.client().is_none(), || {
             let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
             let style = ui.clone_style();
@@ -309,73 +368,6 @@ impl Overlay {
         } else {
             false
         }
-    }
-}
-
-impl ImguiRenderLoop for Overlay {
-    fn render(&mut self, ui: &mut Ui) {
-        let Some(viewport_size) = self.viewport_size else {
-            return;
-        };
-
-        let window_opacity = if self.was_window_focused {
-            1.0
-        } else {
-            self.unfocused_window_opacity
-        };
-        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
-        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
-        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
-        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
-        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
-
-        let mut builder = ui
-            .window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .menu_bar(true);
-
-        // When the menu opens or closes, add or remove space from the bottom of
-        // the overlay for the message bar and horizontal scrollbar.
-        builder = match (self.previous_size, self.is_menu_open(), self.was_menu_open) {
-            (Some(size), true, false) => builder.size([size[0], size[1] + 50.], Condition::Always),
-            (Some(size), false, true) => builder.size([size[0], size[1] - 50.], Condition::Always),
-            _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
-        };
-
-        builder.build(|| {
-            ui.set_window_font_scale(self.font_scale);
-
-            self.render_unfocused_window_opacity_popup(ui);
-            self.render_menu_bar(ui);
-            self.render_connection_widget(ui);
-            ui.separator();
-            self.render_log_window(ui);
-            if self.is_menu_open() {
-                self.render_say_input(ui);
-            }
-            self.render_url_modal_popup(ui);
-
-            self.was_window_focused =
-                ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            self.was_menu_open = self.is_menu_open();
-            self.previous_size = Some(ui.window_size());
-        });
-
-        drop(_bg);
-        drop(_menu_bg);
-    }
-
-    fn before_render<'a>(
-        &'a mut self,
-        ctx: &mut Context,
-        _render_context: &'a mut dyn RenderContext,
-    ) {
-        self.frames_since_new_logs += 1;
-        self.viewport_size = match ctx.main_viewport().size {
-            [0., 0.] => None,
-            size => Some(size),
-        };
     }
 }
 
