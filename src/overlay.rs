@@ -88,7 +88,7 @@ impl Overlay {
             frames_since_new_logs: 0,
             font_scale: 1.8,
             is_compact_mode: false,
-            unfocused_window_opacity: 0.8,
+            unfocused_window_opacity: 0.4,
             is_window_focused: false,
             was_unfocused_window_opacity_button_clicked: false,
         }
