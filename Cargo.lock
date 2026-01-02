@@ -434,7 +434,7 @@ dependencies = [
 [[package]]
 name = "darksouls3"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#015c5a5e1ae9cffaa6d00820a7d3d74f50594eb6"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#7216c66907a37834b73e17a2944717be939d5576"
 dependencies = [
  "bitfield",
  "bitflags 2.10.0",
@@ -584,7 +584,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -657,13 +657,13 @@ dependencies = [
  "memchr",
  "pelite",
  "smallvec",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "fromsoftware-shared"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#015c5a5e1ae9cffaa6d00820a7d3d74f50594eb6"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#7216c66907a37834b73e17a2944717be939d5576"
 dependencies = [
  "from-singleton",
  "fromsoftware-shared-macros",
@@ -678,7 +678,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.11.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#015c5a5e1ae9cffaa6d00820a7d3d74f50594eb6"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#7216c66907a37834b73e17a2944717be939d5576"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1361,7 +1361,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1616,7 +1616,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1945,7 +1945,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
