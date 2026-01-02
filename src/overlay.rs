@@ -217,6 +217,9 @@ impl Overlay {
             return;
         }
 
+        let settings_bg_color = [0.0, 0.0, 0.0, 1.0];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, settings_bg_color);
+
         ui.window("Archipelago Settings")
             .position_pivot([0.5, 0.5])
             .collapsible(false)
@@ -246,6 +249,8 @@ impl Overlay {
                     self.settings_window_visible = false;
                 }
             });
+
+        drop(_bg);
     }
 
     /// Renders the buttons that allow the player to reconnect to Archipelago.
