@@ -235,7 +235,9 @@ impl Overlay {
 
                 let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
                 let _slider_width = ui.push_item_width(150. * self.font_scale);
-                ui.slider_config("Unfocused Opacity", 0, 100)
+                ui.text("Unfocused Opacity");
+                ui.same_line();
+                ui.slider_config("##unfocused-opacity-slider", 0, 100)
                     .display_format("%d%%")
                     .build(&mut opacity_percent);
                 self.unfocused_window_opacity = (opacity_percent as f32) / 100.0;
