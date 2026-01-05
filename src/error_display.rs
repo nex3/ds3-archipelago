@@ -4,7 +4,9 @@ use hudhook::{ImguiRenderLoop, RenderContext};
 use imgui::*;
 
 use anyhow::{Error, Result};
+use darksouls3::sprj::MenuMan;
 use darksouls3::util::input::{InputBlocker, InputFlags};
+use fromsoftware_shared::FromStatic;
 
 use crate::{
     Core, clipboard_backend::WindowsClipboardBackend, overlay::Overlay, utils::PopupModalExt,
@@ -85,6 +87,12 @@ impl ImguiRenderLoop for ErrorDisplay {
         }
 
         let Some(error) = &self.error else { return };
+
+        // Make sure the cursor is visible even if the player is loaded into a
+        // save with the menu closed.
+        if let Ok(man) = unsafe { MenuMan::instance() } {
+            man.set_menu_mode(true);
+        }
 
         unsafe {
             imgui_sys::igSetNextWindowSize(
