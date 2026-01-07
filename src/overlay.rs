@@ -109,6 +109,10 @@ impl Overlay {
             [0., 0.] => None,
             size => Some(size),
         };
+
+        // Set the font scale here because we need the frame height later to
+        // calculate the main window size, which depends on it.
+        ctx.io_mut().font_global_scale = self.font_scale;
     }
 
     /// Render the primary overlay window and any popups it opens.
@@ -146,14 +150,22 @@ impl Overlay {
         // the overlay for the message bar and horizontal scrollbar.
         let is_compact_mode = self.is_compact_mode(core);
         builder = match (self.previous_size, is_compact_mode, self.was_compact_mode) {
-            (Some(size), true, false) => builder.size([size[0], size[1] - 50.], Condition::Always),
-            (Some(size), false, true) => builder.size([size[0], size[1] + 50.], Condition::Always),
+            (Some(size), true, false) => {
+                let style = ui.clone_style();
+                let remove_bottom_space = ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+                
+                builder.size([size[0], size[1] - remove_bottom_space.ceil()], Condition::Always)
+            },
+            (Some(size), false, true) => {
+                let style = ui.clone_style();
+                let add_bottom_space = ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+
+                builder.size([size[0], size[1] + add_bottom_space.ceil()], Condition::Always)
+            },
             _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
         };
 
         builder.build(|| {
-            ui.set_window_font_scale(self.font_scale);
-
             self.render_menu_bar(ui);
             ui.separator();
             self.render_log_window(ui, core);
@@ -224,8 +236,6 @@ impl Overlay {
             .position_pivot([0.5, 0.5])
             .collapsible(false)
             .build(|| {
-                ui.set_window_font_scale(self.font_scale);
-
                 ui.text("Font Size ");
                 ui.same_line();
                 if ui.button("-##font-size-decrease-button") {
@@ -269,22 +279,26 @@ impl Overlay {
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui, core: &Core) {
+        let style = ui.clone_style();
+
         let scrollbar_bg_opacity = if self.was_window_focused { 1.0 } else { 0.0 };
         let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
+        let _item_spacing = ui.push_style_var(StyleVar::ItemSpacing([style.item_spacing[0], style.window_padding[1]]));
+
         let is_compact_mode = self.is_compact_mode(core);
         let input_height = if !is_compact_mode {
-            ui.frame_height_with_spacing().ceil()
+            ui.frame_height_with_spacing()
         } else {
             0.0
         };
 
         ui.child_window("#log")
-            .size([0.0, -input_height])
+            .size([0.0, -input_height.ceil()])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(!is_compact_mode)
+            .always_horizontal_scrollbar(!is_compact_mode)
             .build(|| {
                 let logs = core.logs();
                 if logs.len() != self.logs_emitted {
@@ -320,6 +334,9 @@ impl Overlay {
                 }
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
+
+        drop(_item_spacing);
+        drop(_scrollbar_bg);
     }
 
     /// Renders the text box in which users can write chats to the server.
