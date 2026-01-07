@@ -232,11 +232,11 @@ impl Overlay {
         let settings_bg_color = [0.0, 0.0, 0.0, 1.0];
         let _bg = ui.push_style_color(StyleColor::WindowBg, settings_bg_color);
 
-        ui.window("Archipelago Settings")
+        ui.window("Archipelago Overlay Settings")
             .position_pivot([0.5, 0.5])
             .collapsible(false)
             .build(|| {
-                ui.text("Font Size ");
+                ui.text("Font Size");
                 ui.same_line();
                 if ui.button("-##font-size-decrease-button") {
                     self.font_scale = (self.font_scale - 0.1).max(0.5);
