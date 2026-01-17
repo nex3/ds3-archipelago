@@ -195,7 +195,7 @@ impl Overlay {
             .always_auto_resize(true)
             .build(|| {
                 {
-                    let _ = ui.push_item_width(500. * self.font_scale);
+                    let _item_width = ui.push_item_width(500. * self.font_scale);
                     ui.input_text("Room URL", &mut self.popup_url)
                         .hint("archipelago.gg:12345")
                         .chars_noblank(true)
@@ -259,8 +259,6 @@ impl Overlay {
                     self.settings_window_visible = false;
                 }
             });
-
-        drop(_bg);
     }
 
     /// Renders the buttons that allow the player to reconnect to Archipelago.
@@ -334,9 +332,6 @@ impl Overlay {
                 }
                 self.log_was_scrolled_down = ui.scroll_y() == ui.scroll_max_y();
             });
-
-        drop(_item_spacing);
-        drop(_scrollbar_bg);
     }
 
     /// Renders the text box in which users can write chats to the server.
