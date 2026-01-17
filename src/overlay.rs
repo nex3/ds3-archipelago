@@ -236,7 +236,7 @@ impl Overlay {
             .position_pivot([0.5, 0.5])
             .collapsible(false)
             .build(|| {
-                ui.text("Font Size");
+                ui.text("Font Size ");
                 ui.same_line();
                 if ui.button("-##font-size-decrease-button") {
                     self.font_scale = (self.font_scale - 0.1).max(0.5);
@@ -248,7 +248,7 @@ impl Overlay {
 
                 let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
                 let _slider_width = ui.push_item_width(150. * self.font_scale);
-                ui.text("Unfocused Opacity");
+                ui.text("Unfocused Opacity ");
                 ui.same_line();
                 ui.slider_config("##unfocused-opacity-slider", 0, 100)
                     .display_format("%d%%")
