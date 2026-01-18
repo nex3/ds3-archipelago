@@ -151,10 +151,10 @@ impl Core {
         self.connection.client_mut()
     }
 
-    /// Consumes the list of logs that have been emitted since the last call to
-    /// this function.
-    pub fn consume_logs(&mut self) -> Vec<ap::Print> {
-        std::mem::take(&mut self.log_buffer)
+    /// Returns the list of all logs that have been emitted in the current
+    /// session.
+    pub fn logs(&self) -> &[ap::Print] {
+        self.log_buffer.as_slice()
     }
 
     /// Runs the core logic of the mod. This may set [error], which should be
