@@ -589,7 +589,7 @@ impl Overlay {
             // If MapItemMan isn't available, that usually means we're on the
             // main menu. There's probably a better way to detect that but we
             // don't know it yet.
-            !menu_man.is_menu_mode() && !unsafe { MapItemMan::instance() }.is_err()
+            !menu_man.is_menu_mode() && unsafe { MapItemMan::instance() }.is_ok()
         } else {
             true
         }
