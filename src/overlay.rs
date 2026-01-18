@@ -152,16 +152,24 @@ impl Overlay {
         builder = match (self.previous_size, is_compact_mode, self.was_compact_mode) {
             (Some(size), true, false) => {
                 let style = ui.clone_style();
-                let remove_bottom_space = ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
-                
-                builder.size([size[0], size[1] - remove_bottom_space.ceil()], Condition::Always)
-            },
+                let remove_bottom_space =
+                    ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+
+                builder.size(
+                    [size[0], size[1] - remove_bottom_space.ceil()],
+                    Condition::Always,
+                )
+            }
             (Some(size), false, true) => {
                 let style = ui.clone_style();
-                let add_bottom_space = ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+                let add_bottom_space =
+                    ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
 
-                builder.size([size[0], size[1] + add_bottom_space.ceil()], Condition::Always)
-            },
+                builder.size(
+                    [size[0], size[1] + add_bottom_space.ceil()],
+                    Condition::Always,
+                )
+            }
             _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
         };
 
@@ -283,7 +291,10 @@ impl Overlay {
         let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
         let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
 
-        let _item_spacing = ui.push_style_var(StyleVar::ItemSpacing([style.item_spacing[0], style.window_padding[1]]));
+        let _item_spacing = ui.push_style_var(StyleVar::ItemSpacing([
+            style.item_spacing[0],
+            style.window_padding[1],
+        ]));
 
         let is_compact_mode = self.is_compact_mode(core);
         let input_height = if !is_compact_mode {
