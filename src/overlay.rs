@@ -241,6 +241,7 @@ impl Overlay {
         let _bg = ui.push_style_color(StyleColor::WindowBg, settings_bg_color);
 
         ui.window("Archipelago Overlay Settings")
+            .size([0., 0.], Condition::Appearing)
             .position_pivot([0.5, 0.5])
             .collapsible(false)
             .build(|| {
