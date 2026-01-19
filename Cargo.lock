@@ -55,8 +55,8 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "archipelago_rs"
-version = "0.2.0"
-source = "git+https://github.com/nex3/archipelago_rs?branch=refactor#2997066856e16d2743c39b2e5cf649eb7d50bb09"
+version = "1.0.0-beta.1"
+source = "git+https://github.com/nex3/archipelago_rs?branch=refactor#f4934a08c87fdde4c93c313653dd250031f446f9"
 dependencies = [
  "bitflags 2.10.0",
  "libc",

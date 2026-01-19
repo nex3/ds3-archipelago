@@ -1,12 +1,13 @@
 use std::mem;
 
 use archipelago_rs::{self as ap, RichText, TextColor};
+use darksouls3::sprj::{MapItemMan, MenuMan};
+use fromsoftware_shared::FromStatic;
 use hudhook::RenderContext;
 use imgui::*;
 use log::*;
 
 use crate::core::Core;
-use crate::utils::PopupModalExt;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -41,6 +42,25 @@ pub struct Overlay {
     /// The number of frames that have elapsed since new logs were last added.
     /// We use this to determine when to auto-scroll the log window.
     frames_since_new_logs: u64,
+
+    /// The current font scale for the overlay UI.
+    font_scale: f32,
+
+    /// The unfocused window opacity for the overlay UI.
+    unfocused_window_opacity: f32,
+
+    /// Whether the settings window is currently visible.
+    settings_window_visible: bool,
+
+    /// Whether the overlay window was focused in the previous frame.
+    was_window_focused: bool,
+
+    /// Whether compact mode was enabled in the previous frame.
+    was_compact_mode: bool,
+
+    /// The size of the main overlay window in the previous frame. Used to
+    /// resize when entering and exiting compact mode.
+    previous_size: Option<[f32; 2]>,
 }
 
 // Safety: The sole Overlay instance is owned by Hudhook, which only ever
@@ -59,6 +79,12 @@ impl Overlay {
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
+            font_scale: 1.8,
+            unfocused_window_opacity: 0.4,
+            settings_window_visible: false,
+            was_window_focused: false,
+            was_compact_mode: true,
+            previous_size: None,
         }
     }
 
@@ -67,23 +93,8 @@ impl Overlay {
     /// We don't store `core` directly in the overlay so that we can ensure that
     /// its mutex is only locked once per render.
     pub fn render(&mut self, ui: &mut Ui, core: &mut Core) {
-        let Some(viewport_size) = self.viewport_size else {
-            return;
-        };
-
-        ui.window(format!("Archipelago Client {}", env!("CARGO_PKG_VERSION")))
-            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
-            .position_pivot([1., 0.])
-            .size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver)
-            .build(|| {
-                ui.set_window_font_scale(1.8);
-
-                self.render_connection_widget(ui, core);
-                ui.separator();
-                self.render_log_window(ui, core);
-                self.render_say_input(ui, core);
-                self.render_url_popup(ui, core);
-            });
+        self.render_main_window(ui, core);
+        self.render_settings_window(ui);
     }
 
     /// See [ImguiRenderLoop::before_render], but takes a reference to [Core] as
@@ -98,19 +109,101 @@ impl Overlay {
             [0., 0.] => None,
             size => Some(size),
         };
+
+        // Set the font scale here because we need the frame height later to
+        // calculate the main window size, which depends on it.
+        ctx.io_mut().font_global_scale = self.font_scale;
+    }
+
+    /// Render the primary overlay window and any popups it opens.
+    fn render_main_window(&mut self, ui: &Ui, core: &mut Core) {
+        let Some(viewport_size) = self.viewport_size else {
+            return;
+        };
+
+        let window_opacity = if self.was_window_focused {
+            1.0
+        } else {
+            self.unfocused_window_opacity
+        };
+        let mut bg_color = [0.0, 0.0, 0.0, window_opacity];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, bg_color);
+        let _menu_bg = ui.push_style_color(StyleColor::MenuBarBg, bg_color);
+        bg_color[3] = 1.0; // Popup backgrounds should always be fully opaque.
+        let _popup_bg = ui.push_style_color(StyleColor::PopupBg, bg_color);
+
+        let mut builder = ui
+            .window(format!(
+                "Archipelago Client {} [{}]###ap-client-overlay",
+                env!("CARGO_PKG_VERSION"),
+                match core.connection_state_type() {
+                    ap::ConnectionStateType::Connected => "Connected",
+                    ap::ConnectionStateType::Connecting => "Connecting...",
+                    ap::ConnectionStateType::Disconnected => "Disconnected",
+                }
+            ))
+            .position([viewport_size[0] - 30., 30.], Condition::FirstUseEver)
+            .position_pivot([1., 0.])
+            .menu_bar(true);
+
+        // When the menu opens or closes, add or remove space from the bottom of
+        // the overlay for the message bar and horizontal scrollbar.
+        let is_compact_mode = self.is_compact_mode(core);
+        builder = match (self.previous_size, is_compact_mode, self.was_compact_mode) {
+            (Some(size), true, false) => {
+                let style = ui.clone_style();
+                let remove_bottom_space =
+                    ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+
+                builder.size(
+                    [size[0], size[1] - remove_bottom_space.ceil()],
+                    Condition::Always,
+                )
+            }
+            (Some(size), false, true) => {
+                let style = ui.clone_style();
+                let add_bottom_space =
+                    ui.frame_height() + style.window_padding[1] + style.scrollbar_size;
+
+                builder.size(
+                    [size[0], size[1] + add_bottom_space.ceil()],
+                    Condition::Always,
+                )
+            }
+            _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
+        };
+
+        builder.build(|| {
+            self.render_menu_bar(ui);
+            ui.separator();
+            self.render_log_window(ui, core);
+            if !is_compact_mode {
+                if core.is_disconnected() {
+                    self.render_connection_buttons(ui, core);
+                } else {
+                    self.render_say_input(ui, core);
+                }
+            }
+            self.render_url_modal_popup(ui, core);
+
+            self.was_window_focused =
+                ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.was_compact_mode = is_compact_mode;
+            self.previous_size = Some(ui.window_size());
+        });
     }
 
     /// Renders the modal popup which queries the player for connection
     /// information.
-    fn render_url_popup(&mut self, ui: &Ui, core: &mut Core) {
-        ui.modal_popup_config("#url-popup")
+    fn render_url_modal_popup(&mut self, ui: &Ui, core: &mut Core) {
+        ui.modal_popup_config("#url-modal-popup")
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .size([600., 0.], Condition::FirstUseEver)
+            .always_auto_resize(true)
             .build(|| {
                 {
-                    let _ = ui.push_item_width(600.);
+                    let _item_width = ui.push_item_width(500. * self.font_scale);
                     ui.input_text("Room URL", &mut self.popup_url)
                         .hint("archipelago.gg:12345")
                         .chars_noblank(true)
@@ -128,32 +221,94 @@ impl Overlay {
             });
     }
 
-    /// Renders the widget that displays the current connection status and
-    /// allows the player to reconnect to Archipelago.
-    fn render_connection_widget(&mut self, ui: &Ui, core: &Core) {
-        ui.text("Connection status:");
-        ui.same_line();
-        match core.connection_state_type() {
-            ap::ConnectionStateType::Connected => ui.text_colored(RED.to_rgba_f32s(), "Connected"),
-            ap::ConnectionStateType::Connecting => ui.text("Connecting..."),
-            ap::ConnectionStateType::Disconnected => {
-                ui.text_colored(RED.to_rgba_f32s(), "Disconnected");
-                ui.same_line();
-                if ui.button("Change URL") {
-                    ui.open_popup("#url-popup");
-                    core.config().url().clone_into(&mut self.popup_url);
-                }
+    /// Renders the menu bar.
+    fn render_menu_bar(&mut self, ui: &Ui) {
+        ui.menu_bar(|| {
+            if ui.menu_item("Settings") {
+                log::warn!("Click registered");
+                self.settings_window_visible = true;
             }
+        });
+    }
+
+    /// Renders the settings popup.
+    fn render_settings_window(&mut self, ui: &Ui) {
+        if !self.settings_window_visible {
+            return;
+        }
+
+        let settings_bg_color = [0.0, 0.0, 0.0, 1.0];
+        let _bg = ui.push_style_color(StyleColor::WindowBg, settings_bg_color);
+
+        ui.window("Archipelago Overlay Settings")
+            .size([0., 0.], Condition::Appearing)
+            .position_pivot([0.5, 0.5])
+            .collapsible(false)
+            .build(|| {
+                ui.text("Font Size ");
+                ui.same_line();
+                if ui.button("-##font-size-decrease-button") {
+                    self.font_scale = (self.font_scale - 0.1).max(0.5);
+                }
+                ui.same_line();
+                if ui.button("+##font-size-increase-button") {
+                    self.font_scale = (self.font_scale + 0.1).min(4.0);
+                }
+
+                let mut opacity_percent = (self.unfocused_window_opacity * 100.0).round() as i32;
+                let _slider_width = ui.push_item_width(150. * self.font_scale);
+                ui.text("Unfocused Opacity ");
+                ui.same_line();
+                ui.slider_config("##unfocused-opacity-slider", 0, 100)
+                    .display_format("%d%%")
+                    .build(&mut opacity_percent);
+                self.unfocused_window_opacity = (opacity_percent as f32) / 100.0;
+
+                if ui.button("Ok") {
+                    self.settings_window_visible = false;
+                }
+            });
+    }
+
+    /// Renders the buttons that allow the player to reconnect to Archipelago.
+    /// These take the place of the text box when the client is disconnected.
+    fn render_connection_buttons(&mut self, ui: &Ui, core: &mut Core) {
+        if ui.button("Reconnect") {
+            core.reconnect();
+        }
+
+        ui.same_line();
+        if ui.button("Change URL") {
+            ui.open_popup("#url-modal-popup");
+            core.config().url().clone_into(&mut self.popup_url);
         }
     }
 
     /// Renders the log window which displays all the prints sent from the server.
     fn render_log_window(&mut self, ui: &Ui, core: &Core) {
+        let style = ui.clone_style();
+
+        let scrollbar_bg_opacity = if self.was_window_focused { 1.0 } else { 0.0 };
+        let scrollbar_bg_color = [0.0, 0.0, 0.0, scrollbar_bg_opacity];
+        let _scrollbar_bg = ui.push_style_color(StyleColor::ScrollbarBg, scrollbar_bg_color);
+
+        let _item_spacing = ui.push_style_var(StyleVar::ItemSpacing([
+            style.item_spacing[0],
+            style.window_padding[1],
+        ]));
+
+        let is_compact_mode = self.is_compact_mode(core);
+        let input_height = if !is_compact_mode {
+            ui.frame_height_with_spacing()
+        } else {
+            0.0
+        };
+
         ui.child_window("#log")
-            .size([0.0, -33.])
+            .size([0.0, -input_height.ceil()])
             .draw_background(false)
             .always_vertical_scrollbar(true)
-            .horizontal_scrollbar(true)
+            .always_horizontal_scrollbar(!is_compact_mode)
             .build(|| {
                 let logs = core.logs();
                 if logs.len() != self.logs_emitted {
@@ -194,17 +349,19 @@ impl Overlay {
     /// Renders the text box in which users can write chats to the server.
     fn render_say_input(&mut self, ui: &Ui, core: &mut Core) {
         ui.disabled(core.client().is_none(), || {
-            let width = ui.push_item_width(-40.);
+            let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
+            let style = ui.clone_style();
+            let spacing = style.item_spacing[0] * self.font_scale * 0.7;
+
+            let input_width = ui.push_item_width(-(arrow_button_width + spacing));
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
                 .enter_returns_true(true)
                 .build();
-            drop(width);
+            drop(input_width);
 
-            ui.same_line();
-            let width = ui.push_item_width(30.);
+            ui.same_line_with_spacing(0.0, spacing);
             send = ui.arrow_button("##say-button", Direction::Right) || send;
-            drop(width);
 
             if send && let Some(client) = core.client_mut() {
                 // We don't have a great way to surface these errors, and
@@ -212,6 +369,23 @@ impl Overlay {
                 let _ = client.say(mem::take(&mut self.say_input));
             }
         });
+    }
+
+    /// Returns whether the overlay is currently in "compact mode", where the
+    /// bottommost widgets are not rendered.
+    fn is_compact_mode(&self, core: &Core) -> bool {
+        if core.is_disconnected() {
+            // When the connection is inactive, always show the buttons to
+            // reconnect.
+            false
+        } else if let Ok(menu_man) = unsafe { MenuMan::instance() } {
+            // If MapItemMan isn't available, that usually means we're on the
+            // main menu. There's probably a better way to detect that but we
+            // don't know it yet.
+            !menu_man.is_menu_mode() && unsafe { MapItemMan::instance() }.is_ok()
+        } else {
+            true
+        }
     }
 }
 
