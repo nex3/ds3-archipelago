@@ -1,11 +1,12 @@
 use std::time::{Duration, Instant, SystemTime};
-use std::{io, mem};
+use std::{collections::HashSet, io, mem};
 
 use anyhow::{Error, Result, bail};
 use archipelago_rs as ap;
+use darksouls3::app_menu::*;
 use darksouls3::cs::*;
 use darksouls3::sprj::*;
-use fromsoftware_shared::{FromStatic, InstanceResult};
+use fromsoftware_shared::{FromStatic, InstanceResult, Superclass};
 use log::*;
 
 use crate::item::{EquipParamExt, ItemIdExt};
@@ -47,6 +48,11 @@ pub struct Core {
     /// resend any locations that may have been missed.
     locations_sent: usize,
 
+    /// The set of DS3 item IDs for shop locations whose hints have already been
+    /// sent to the server. This is intentionally not preserved across loads so
+    /// that if something goes wrong, the player can quit out and re-send hints.
+    shop_items_hinted: HashSet<ItemId>,
+
     /// The last time the player either sent or received a death link (or
     /// started a session).
     last_death_link: Instant,
@@ -83,6 +89,7 @@ impl Core {
             last_item_time: Instant::now(),
             load_time: None,
             locations_sent: 0,
+            shop_items_hinted: Default::default(),
             last_death_link: Instant::now(),
             sent_goal: false,
             error: None,
@@ -288,6 +295,7 @@ impl Core {
         self.send_death_link()?;
         self.process_incoming_items(&item_man);
         self.process_inventory_items()?;
+        self.send_shop_hints()?;
         self.handle_goal()?;
 
         Ok(())
@@ -558,6 +566,42 @@ impl Core {
         // Always ignore death links that we sent.
         player.kill();
         self.last_death_link = Instant::now();
+    }
+
+    /// If a shop is currently open, send all its locations as hints to the
+    /// server.
+    fn send_shop_hints(&mut self) -> Result<()> {
+        let Some(client) = self.connection.client_mut() else {
+            return Ok(());
+        };
+        let Ok(regulation_manager) = (unsafe { CSRegulationManager::instance() }) else {
+            return Ok(());
+        };
+        let Ok(nms) = (unsafe { NewMenuSystem::instance() }) else {
+            return Ok(());
+        };
+        let Some(menu) = nms
+            .windows()
+            .find_map(|w| w.as_subclass::<GaitemSelectMenu>())
+        else {
+            return Ok(());
+        };
+
+        let locations = menu
+            .items()
+            .filter(|i| i.id.is_archipelago() && self.shop_items_hinted.insert(i.id))
+            .map(|i| {
+                regulation_manager
+                    .get_equip_param(i.id)
+                    .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", i.id))
+                    .archipelago_location_id()
+            })
+            .collect::<Vec<_>>();
+        if !locations.is_empty() {
+            info!("Hinting location IDs: {:?}", locations);
+        }
+        client.create_hints(locations, client.this_player().slot(), ap::HintStatus::Unspecified)?;
+        Ok(())
     }
 
     /// Sends a death link notification when the player dies.

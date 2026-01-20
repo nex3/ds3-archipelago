@@ -1,8 +1,17 @@
 ## 4.0.0-alpha.7
 
+* When viewing an Archipelago item in a shop, the client will now post a hint to
+  the server with the item's location.
+
 * Fix a bug where the game crashed when the Archipelago connection closed.
 
 * Make sure the cursor is visible when showing the user a fatal error.
+
+* The overlay is now partially transparent when it's not in focus, and the input
+  bar is hidden unless the player is in a menu and could access it.
+
+* Added a settings menu which allows font size and overlay transparency to be
+  adjusted.
 
 ## 4.0.0-alpha.6
 
