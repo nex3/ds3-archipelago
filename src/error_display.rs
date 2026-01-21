@@ -111,8 +111,6 @@ impl ImguiRenderLoop for ErrorDisplay {
                 Condition::Always,
             )
             .build(|| {
-                ui.set_window_font_scale(1.8);
-
                 ui.checkbox("Show full error", &mut self.show_full_error);
                 ui.text_wrapped(if self.show_full_error {
                     format!("{:?}", error)
@@ -138,6 +136,9 @@ impl ImguiRenderLoop for ErrorDisplay {
     ) {
         if let Some(overlay) = self.overlay.as_mut() {
             overlay.before_render(ctx, render_context);
+        } else {
+            // Set the font scale here to match the overlay's logic.
+            ctx.io_mut().font_global_scale = 1.8;
         }
     }
 }
