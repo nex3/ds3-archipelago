@@ -1,3 +1,8 @@
+## 4.0.0-alpha.8
+
+* Fix a bug where the client would send empty `CreateHints` packets over and
+  over any time a shop was open.
+
 ## 4.0.0-alpha.7
 
 * When viewing an Archipelago item in a shop, the client will now post a hint to
