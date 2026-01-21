@@ -154,6 +154,11 @@ jobs:
 
     - run: unzip -d me3-windows me3-windows.zip
 
+    - name: Download Archipelago repo
+      run: |
+        curl -L "https://github.com/nex3/Archipelago/archive/refs/heads/ds3-4.0.tar.gz" | tar xz
+        zip -r dark_souls_3.apworld Archipelago-*/worlds/dark_souls_3
+
     - name: Assemble Windows release
       run: |
         mkdir "$dir"
@@ -166,6 +171,7 @@ jobs:
         mv me3-windows/CHANGELOG.pdf "$dir/ME3-CHANGELOG.pdf"
         mv me3-windows/LICENSE-APACHE "$dir/ME3-LICENSE-APACHE"
         mv me3-windows/LICENSE-MIT "$dir/ME3-LICENSE-MIT"
+        mv dark_souls_3.apworld "$dir"
 
         # Windows-specific
         mv me3-windows/bin "$dir/bin"
@@ -214,22 +220,20 @@ jobs:
 
   # Only push tags once everything else builds successfully, so that they don't break redeploys.
 
-  # We'll re-enable this once we actually have any differences relative to the
-  # currently released version.
-  # tag-server:
-  #   runs-on: ubuntu-latest
-  #   needs: [version, build-zip]
-  #
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #     with:
-  #       repository: nex3/Archipelago
-  #       token: ${{ secrets.GH_TOKEN }}
-  #       ref: ds3-4.0
-  #       fetch-depth: 0
-  #
-  #   - run: git tag ds3-${{ needs.version.outputs.version }}
-  #   - run: git push --tag
+  tag-server:
+    runs-on: ubuntu-latest
+    needs: [version, build-zip]
+  
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: nex3/Archipelago
+        token: ${{ secrets.GH_TOKEN }}
+        ref: ds3-4.0
+        fetch-depth: 0
+  
+    - run: git tag ds3-${{ needs.version.outputs.version }}
+    - run: git push --tag
 
   tag-static:
     runs-on: ubuntu-latest
