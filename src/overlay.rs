@@ -1,10 +1,11 @@
-use std::mem;
+use std::{mem, ptr};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
 use darksouls3::sprj::{MapItemMan, MenuMan};
 use fromsoftware_shared::FromStatic;
 use hudhook::RenderContext;
 use imgui::*;
+use imgui_sys::igSetWindowFocus_Str;
 use log::*;
 
 use crate::core::Core;
@@ -120,6 +121,15 @@ impl Overlay {
         let Some(viewport_size) = self.viewport_size else {
             return;
         };
+
+        // By default, imgui doesn't remove focus when escape is pressed, even
+        // though it does relinquish its claim to the mouse and keyboard.
+        // Because we use focus to determine when to make the overlay
+        // transparent, we want it to be removed more aggressivley, so we do so
+        // manually.
+        if ui.is_key_pressed(Key::Escape) {
+            unsafe { igSetWindowFocus_Str(ptr::null()) };
+        }
 
         let window_opacity = if self.was_window_focused {
             1.0

@@ -5,6 +5,9 @@
 
 * Fix the font scaling for fatal error pop-ups.
 
+* Properly make the overlay transparent when using Escape to close the in-game
+  menu.
+
 ## 4.0.0-alpha.7
 
 * When viewing an Archipelago item in a shop, the client will now post a hint to
