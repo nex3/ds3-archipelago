@@ -622,9 +622,33 @@ impl Core {
         if player.super_chr_ins.modules.data.hp != 0 {
             return Ok(());
         }
+        let Some(mut save) = SaveData::instance_mut() else {
+            return Ok(());
+        };
 
-        client.death_link(Default::default())?;
+        save.deaths += 1;
+        let amnesty = client.slot_data().options.death_link_amnesty;
+        if save.deaths >= amnesty {
+            client.death_link(Default::default())?;
+            save.deaths = 0;
+            self.log("You have sent a death link to your teammates.");
+        } else {
+            let remaining = amnesty - save.deaths;
+            self.log(format!(
+                "You have been granted death link amnesty. {}",
+                if remaining == 1 {
+                    "1 death remains."
+                } else {
+                    format!("{} deaths remain.", remaining)
+                }
+            ));
+        }
+
+        // Set this even if we don't send out a death link so we don't send run
+        // this multiple times while the player is dying and so they don't get
+        // killed from an incoming death link immediately after respawning.
         self.last_death_link = Instant::now();
+
         Ok(())
     }
 

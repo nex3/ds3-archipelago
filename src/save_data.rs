@@ -9,19 +9,13 @@ use log::*;
 
 /// The singleton instance of the save data, or None if it hasn't been loaded
 /// from the save file or set explicitly.
-static INSTANCE: LazyLock<RwLock<SaveData>> = LazyLock::new(|| {
-    RwLock::new(SaveData {
-        items_granted: Default::default(),
-        locations: Default::default(),
-        seed: None,
-    })
-});
+static INSTANCE: LazyLock<RwLock<SaveData>> = LazyLock::new(|| RwLock::new(Default::default()));
 
 /// The configuration for the binary encoding of the save data.
 const CONFIG: bincode::config::Configuration = bincode::config::standard();
 
 /// Data that's saved and loaded along with the player's game save.
-#[derive(Debug, Decode, Encode)]
+#[derive(Debug, Decode, Encode, Default)]
 pub struct SaveData {
     /// The number of Archipelago items that have been granted to this player
     /// from foreign games throughout the course of this run.
@@ -36,6 +30,10 @@ pub struct SaveData {
     /// to verify that the player doesn't accidentally corrupt a save by loading
     /// into it while connected to the wrong multiworld.
     pub seed: Option<String>,
+
+    /// The number of deaths that player has experienced since last sending a
+    /// death link.
+    pub deaths: u8,
 }
 
 impl SaveData {

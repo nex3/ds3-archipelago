@@ -53,6 +53,11 @@ pub struct Options {
     /// Whether the player's Archipelago expects the DS3 DLC to be enabled.
     #[serde(deserialize_with = "int_to_bool")]
     pub enable_dlc: bool,
+
+    // New in 4.0
+    /// How many deaths it takes to send a death link.
+    #[serde(default = "default_death_link_amnesty")]
+    pub death_link_amnesty: u8,
 }
 
 /// Deserializes an integer as a boolean value.
@@ -61,6 +66,10 @@ where
     D: Deserializer<'de>,
 {
     Ok(u64::deserialize(deserializer)? != 0)
+}
+
+fn default_death_link_amnesty() -> u8 {
+    1
 }
 
 #[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
