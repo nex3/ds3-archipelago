@@ -599,7 +599,11 @@ impl Core {
             .collect::<Vec<_>>();
         if !locations.is_empty() {
             info!("Hinting location IDs: {:?}", locations);
-            client.create_hints(locations, client.this_player().slot(), ap::HintStatus::Unspecified)?;
+            client.create_hints(
+                locations,
+                client.this_player().slot(),
+                ap::HintStatus::Unspecified,
+            )?;
         }
         Ok(())
     }
@@ -640,7 +644,11 @@ impl Core {
         if let Ok(event_man) = (unsafe { SprjEventFlagMan::instance() })
             && let Some(client) = self.connection.client_mut()
             && !self.sent_goal
-            && event_man.get_flag(14100800.try_into().unwrap())
+            && client
+                .slot_data()
+                .goal
+                .iter()
+                .all(|flag| event_man.get_flag(*flag))
         {
             client.set_status(ap::ClientStatus::Goal)?;
             self.sent_goal = true;

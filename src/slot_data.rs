@@ -1,14 +1,19 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash, str::FromStr};
 
-use darksouls3::sprj::ItemId;
+use darksouls3::sprj::{EventFlag, ItemId};
+use serde::de::{Error, Unexpected};
 use serde::{Deserialize, Deserializer};
-use std::{hash::Hash, str::FromStr};
 
 /// The slot data supplied by the Archipelago server which provides specific
 /// information about how to set up this game.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SlotData {
+    /// Event flags that must all be set to true in order for the player to be
+    /// considered to have achieved their goal.
+    #[serde(deserialize_with = "deserialize_goals")]
+    pub goal: Vec<EventFlag>,
+
     /// A map from Archipelago's item IDs to DS3's.
     pub ap_ids_to_item_ids: HashMap<I64Key, DeserializableItemId>,
 
@@ -18,6 +23,25 @@ pub struct SlotData {
 
     /// The options chosen by this player.
     pub options: Options,
+}
+
+/// Deserializes a list of event flags, defaulting to the flag for defeating
+/// Soul of Cinder.
+fn deserialize_goals<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<EventFlag>, D::Error> {
+    if let Some(ids) = Option::<Vec<u32>>::deserialize(deserializer)? {
+        ids.into_iter()
+            .map(|i| {
+                EventFlag::try_from(i).map_err(|_| {
+                    D::Error::invalid_value(Unexpected::Unsigned(i.into()), &"a DS3 event flag")
+                })
+            })
+            .collect()
+    } else {
+        // The DS3 AP 3.x world doesn't provide a list of goal events.
+        Ok(vec![14100800.try_into().unwrap()])
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,7 +55,7 @@ pub struct Options {
     pub enable_dlc: bool,
 }
 
-/// Deserialized an integer as a boolean value.
+/// Deserializes an integer as a boolean value.
 fn int_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
     D: Deserializer<'de>,

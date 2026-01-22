@@ -1,3 +1,9 @@
+## 4.0.0-alpha.9
+
+* Add an option to customize the Archipelago goal. This only works with the
+  bundled apworld. See the documentation of `goal` in `Dark Souls III Options
+  Template.yaml` for details.
+
 ## 4.0.0-alpha.8
 
 * Fix a bug where the client would send empty `CreateHints` packets over and
