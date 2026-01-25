@@ -4,6 +4,9 @@
   bundled apworld. See the documentation of `goal` in `Dark Souls III Options
   Template.yaml` for details.
 
+* Add an option to only send death links when you die without picking up your
+  bloodstain.
+
 * Add an option to customize death link amnesty. See the documentation of
   `death_link_amnesty` in `Dark Souls III Options Template.yaml` for details.
 

@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::Hash, str::FromStr};
 use darksouls3::sprj::{EventFlag, ItemId};
 use serde::de::{Error, Unexpected};
 use serde::{Deserialize, Deserializer};
+use serde_repr::Deserialize_repr;
 
 /// The slot data supplied by the Archipelago server which provides specific
 /// information about how to set up this game.
@@ -47,8 +48,7 @@ fn deserialize_goals<'de, D: Deserializer<'de>>(
 #[derive(Debug, Deserialize)]
 pub struct Options {
     /// Whether to kill the player when other players are killed and vice versa.
-    #[serde(deserialize_with = "int_to_bool")]
-    pub death_link: bool,
+    pub death_link: DeathLinkOption,
 
     /// Whether the player's Archipelago expects the DS3 DLC to be enabled.
     #[serde(deserialize_with = "int_to_bool")]
@@ -70,6 +70,21 @@ where
 
 fn default_death_link_amnesty() -> u8 {
     1
+}
+
+/// Possible options for death link.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize_repr)]
+#[repr(u8)]
+pub enum DeathLinkOption {
+    /// Death link is disabled.
+    Off = 0,
+
+    /// Death link triggers on any death.
+    AnyDeath = 1,
+
+    /// Death link only triggers for deaths when the player dies without
+    /// collecting their last bloodstain.
+    LostSouls = 2,
 }
 
 #[derive(Debug, Deserialize, Hash, PartialEq, Eq)]

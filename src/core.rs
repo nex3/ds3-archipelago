@@ -10,7 +10,7 @@ use fromsoftware_shared::{FromStatic, InstanceResult, Superclass};
 use log::*;
 
 use crate::item::{EquipParamExt, ItemIdExt};
-use crate::slot_data::{I64Key, SlotData};
+use crate::slot_data::{DeathLinkOption, I64Key, SlotData};
 use crate::{config::Config, save_data::*};
 
 /// The core of the Archipelago mod. This is responsible for running the
@@ -626,27 +626,31 @@ impl Core {
             return Ok(());
         };
 
-        save.deaths += 1;
-        let amnesty = client.slot_data().options.death_link_amnesty;
-        if save.deaths >= amnesty {
-            client.death_link(Default::default())?;
-            save.deaths = 0;
-            self.log("You have sent a death link to your teammates.");
-        } else {
-            let remaining = amnesty - save.deaths;
-            self.log(format!(
-                "You have been granted death link amnesty. {}",
-                if remaining == 1 {
-                    "1 death remains."
-                } else {
-                    format!("{} deaths remain.", remaining)
-                }
-            ));
+        if client.slot_data().options.death_link != DeathLinkOption::LostSouls
+            || unsafe { GameDataMan::instance() }.is_ok_and(|man| man.bloodstain.exists())
+        {
+            save.deaths += 1;
+            let amnesty = client.slot_data().options.death_link_amnesty;
+            if save.deaths >= amnesty {
+                client.death_link(Default::default())?;
+                save.deaths = 0;
+                self.log("You have sent a death link to your teammates.");
+            } else {
+                let remaining = amnesty - save.deaths;
+                self.log(format!(
+                    "You have been granted death link amnesty. {}",
+                    if remaining == 1 {
+                        "1 death remains.".to_string()
+                    } else {
+                        format!("{} deaths remain.", remaining)
+                    }
+                ));
+            }
         }
 
-        // Set this even if we don't send out a death link so we don't send run
-        // this multiple times while the player is dying and so they don't get
-        // killed from an incoming death link immediately after respawning.
+        // Set this even if we don't send out a death link so we don't run this
+        // multiple times while the player is dying and so they don't get killed
+        // from an incoming death link immediately after respawning.
         self.last_death_link = Instant::now();
 
         Ok(())
@@ -659,7 +663,7 @@ impl Core {
             return false;
         };
 
-        client.slot_data().options.death_link
+        client.slot_data().options.death_link != DeathLinkOption::Off
             && self.last_death_link.elapsed() >= DEATH_LINK_GRACE_PERIOD
     }
 

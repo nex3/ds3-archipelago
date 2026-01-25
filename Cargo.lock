@@ -432,7 +432,7 @@ dependencies = [
 [[package]]
 name = "darksouls3"
 version = "0.12.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#1758d3d4ee0eb77dcb8d75660914320cd78e1262"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
 dependencies = [
  "bitfield",
  "bitflags 2.10.0",
@@ -546,6 +546,7 @@ dependencies = [
  "pelite",
  "serde",
  "serde_json",
+ "serde_repr",
  "simplelog",
  "tungstenite",
  "windows",
@@ -659,7 +660,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared"
 version = "0.12.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#1758d3d4ee0eb77dcb8d75660914320cd78e1262"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
 dependencies = [
  "from-singleton",
  "fromsoftware-shared-macros",
@@ -674,7 +675,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.12.0"
-source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#1758d3d4ee0eb77dcb8d75660914320cd78e1262"
+source = "git+https://github.com/nex3/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
 dependencies = [
  "inflections",
  "proc-macro2",

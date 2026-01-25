@@ -25,6 +25,7 @@ log = "0.4.29"
 mint = "0.5.9"
 pelite = "0.10"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_repr = "0.1.20"
 simplelog = "0.12.2"
 tungstenite = "0.28.0"
 windows-result = "0.4.1"
