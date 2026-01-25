@@ -1,3 +1,8 @@
+## 4.0.0-beta.3
+
+* Rename the `goal` value from "Lothric Castle Boss" to "Lothric Castle End
+  Boss" for consistency with other regions that have multiple bosses.
+
 ## 4.0.0-beta.2
 
 * Fix the structure of the bundled `apworld` file.
