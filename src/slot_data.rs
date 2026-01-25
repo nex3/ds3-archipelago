@@ -12,7 +12,8 @@ use serde_repr::Deserialize_repr;
 pub struct SlotData {
     /// Event flags that must all be set to true in order for the player to be
     /// considered to have achieved their goal.
-    #[serde(deserialize_with = "deserialize_goals")]
+    #[serde(default = "default_goal")]
+    #[serde(deserialize_with = "deserialize_goal")]
     pub goal: Vec<EventFlag>,
 
     /// A map from Archipelago's item IDs to DS3's.
@@ -28,21 +29,23 @@ pub struct SlotData {
 
 /// Deserializes a list of event flags, defaulting to the flag for defeating
 /// Soul of Cinder.
-fn deserialize_goals<'de, D: Deserializer<'de>>(
+fn deserialize_goal<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<EventFlag>, D::Error> {
-    if let Some(ids) = Option::<Vec<u32>>::deserialize(deserializer)? {
-        ids.into_iter()
-            .map(|i| {
-                EventFlag::try_from(i).map_err(|_| {
-                    D::Error::invalid_value(Unexpected::Unsigned(i.into()), &"a DS3 event flag")
-                })
+    Vec::<u32>::deserialize(deserializer)?
+        .into_iter()
+        .map(|i| {
+            EventFlag::try_from(i).map_err(|_| {
+                D::Error::invalid_value(Unexpected::Unsigned(i.into()), &"a DS3 event flag")
             })
-            .collect()
-    } else {
-        // The DS3 AP 3.x world doesn't provide a list of goal events.
-        Ok(vec![14100800.try_into().unwrap()])
-    }
+        })
+        .collect()
+}
+
+/// The default goal, used because the DS3 AP 3.x world doesn't provide a list
+/// of goal events.
+fn default_goal() -> Vec<EventFlag> {
+    vec![14100800.try_into().unwrap()]
 }
 
 #[derive(Debug, Deserialize)]
