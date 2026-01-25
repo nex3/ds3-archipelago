@@ -10,6 +10,8 @@
 * Add an option to customize death link amnesty. See the documentation of
   `death_link_amnesty` in `Dark Souls III Options Template.yaml` for details.
 
+* Fix a bug where rings would be placed in the incorrect locations.
+
 ## 4.0.0-alpha.8
 
 * Fix a bug where the client would send empty `CreateHints` packets over and
