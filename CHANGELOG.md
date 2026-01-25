@@ -1,4 +1,4 @@
-## 4.0.0-alpha.9
+## 4.0.0-beta.1
 
 * Add an option to customize the Archipelago goal. This only works with the
   bundled apworld. See the documentation of `goal` in `Dark Souls III Options

@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "ds3-archipelago"
-version = "4.0.0-alpha.8"
+version = "4.0.0-beta.1"
 dependencies = [
  "anyhow",
  "archipelago_rs",
