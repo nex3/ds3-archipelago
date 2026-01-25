@@ -157,7 +157,8 @@ jobs:
     - name: Download Archipelago repo
       run: |
         curl -L "https://github.com/nex3/Archipelago/archive/refs/heads/ds3-4.0.tar.gz" | tar xz
-        zip -r dark_souls_3.apworld Archipelago-*/worlds/dark_souls_3
+        cd Archipelago-*/worlds
+        zip -r ../../dark_souls_3.apworld dark_souls_3
 
     - name: Assemble Windows release
       run: |

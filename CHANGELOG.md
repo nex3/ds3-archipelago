@@ -1,5 +1,7 @@
 ## 4.0.0-beta.2
 
+* Fix the structure of the bundled `apworld` file.
+
 * Include a sample YAML template for the beta version of the apworld rather than
   one for the stable version.
 
