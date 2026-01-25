@@ -105,9 +105,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: ArchipelagoMW/Archipelago
+        repository: nex3/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: 0.5.1
+        ref: ds3-4.0
         fetch-depth: 0
 
     - uses: actions/setup-python@v5

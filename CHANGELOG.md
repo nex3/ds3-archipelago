@@ -1,3 +1,8 @@
+## 4.0.0-beta.2
+
+* Include a sample YAML template for the beta version of the apworld rather than
+  one for the stable version.
+
 ## 4.0.0-beta.1
 
 * Add an option to customize the Archipelago goal. This only works with the
