@@ -1,3 +1,7 @@
+## 4.1.0-alpha.2
+
+* Include the correct apworld in the distribution.
+
 ## 4.1.0-alpha.1
 
 * Add `unmissable_quests`, `unmissable_invasions`, and
