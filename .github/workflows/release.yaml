@@ -107,7 +107,7 @@ jobs:
       with:
         repository: nex3/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: ds3-4.0
+        ref: ds3-${{ startsWith(github.ref, 'refs/tags/v4.0.') && '4.0' || '4.1' }}
         fetch-depth: 0
 
     - uses: actions/setup-python@v5
@@ -156,7 +156,7 @@ jobs:
 
     - name: Download Archipelago repo
       run: |
-        curl -L "https://github.com/nex3/Archipelago/archive/refs/heads/ds3-4.0.tar.gz" | tar xz
+        curl -L "https://github.com/nex3/Archipelago/archive/refs/heads/ds3-ds3-${{ startsWith(github.ref, 'refs/tags/v4.0.') && '4.0' || '4.1' }}.tar.gz" | tar xz
         cd Archipelago-*/worlds
         zip -r ../../dark_souls_3.apworld dark_souls_3
 
@@ -230,7 +230,7 @@ jobs:
       with:
         repository: nex3/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: ds3-4.0
+        ref: ds3-${{ startsWith(github.ref, 'refs/tags/v4.0.') && '4.0' || '4.1' }}
         fetch-depth: 0
   
     - run: git tag ds3-${{ needs.version.outputs.version }}
