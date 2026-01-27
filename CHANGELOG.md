@@ -1,3 +1,15 @@
+## 4.1.0-alpha.1
+
+* Add `unmissable_quests`, `unmissable_invasions`, and
+  `unmissable_transpositions` options. These modify the logic of the game to
+  ensure that locations that are missable under vanilla logic are instead always
+  eventually reachable. Not all missable are supported yet; See [the location
+  documentation] for details.
+
+  [the location documentation]: https://nex-3.com/ds3-preview/locations/
+
+* Add an `anri_gender` option to control the gender of Anri of Astora.
+
 ## 4.0.0-beta.3
 
 * Rename the `goal` value from "Lothric Castle Boss" to "Lothric Castle End
