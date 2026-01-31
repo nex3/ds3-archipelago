@@ -196,7 +196,9 @@ jobs:
         path: ${{ env.dir }}/randomizer
 
     - name: Zip release
-      run: zip -r "${{ env.dir }}-windows.zip" "$dir"
+      run: |
+        cd "$dir"
+        zip -r ../"${{ env.dir }}-windows.zip" .
 
     - run: tar xzf me3-linux.tar.gz --one-top-level=me3-linux
 
