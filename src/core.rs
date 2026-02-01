@@ -599,11 +599,7 @@ impl Core {
             .collect::<Vec<_>>();
         if !locations.is_empty() {
             info!("Hinting location IDs: {:?}", locations);
-            client.create_hints(
-                locations,
-                client.this_player().slot(),
-                ap::HintStatus::Unspecified,
-            )?;
+            client.create_hints(locations)?;
         }
         Ok(())
     }
