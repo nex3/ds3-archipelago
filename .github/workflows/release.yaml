@@ -69,9 +69,8 @@ jobs:
         path: SoulsRandomizers
     - uses: actions/checkout@v4
       with:
-        repository: thefifthmatt/SoulsIds
-        # Later versions expect AC6 stuff from SoulsFormats which hasn't been published yet.
-        ref: 986346a705799f528d620c19ca384e21cb008b54
+        repository: nex3/SoulsIds
+        ref: event-id
         path: SoulsIds
     - uses: actions/checkout@v4
       with:
@@ -197,7 +196,9 @@ jobs:
         path: ${{ env.dir }}/randomizer
 
     - name: Zip release
-      run: zip -r "${{ env.dir }}-windows.zip" "$dir"
+      run: |
+        cd "$dir"
+        zip -r ../"${{ env.dir }}-windows.zip" .
 
     - run: tar xzf me3-linux.tar.gz --one-top-level=me3-linux
 

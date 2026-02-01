@@ -4,8 +4,12 @@ This package contains the static randomizer and the DS3 mod for integrating _Dar
 
 [Archipelago]: https://archipelago.gg
 [the Releases page]: https://github.com/nex3/ds3-archipelago/releases/
-[the Archipelago DS3 setup guide]: https://archipelago.gg/tutorial/Dark%20Souls%20III/setup/en
-[game page]: https://archipelago.gg/games/Dark%20Souls%20III/info/en
+[the Archipelago DS3 setup guide]: https://nex-3.com/ds3/setup
+[game page]: https://nex-3.com/ds3/info/en
+
+**Important note:** The setup guide on the Archipelago website is outdated, and only work for the old 3.x versions of the randomizer. Make sure you read [the new setup guide] for the correct instructions!
+
+[the new setup guide]: https://nex-3.com/ds3/setup
 
 You can also check out [the changelog] for information about the changes in the latest randomizer release.
 
@@ -22,6 +26,14 @@ This release is a ground-up rewrite of the DS3 Archipelago mod, which shares no 
 * There's better protection against issues like collecting items while disconnected from the server.
 
 * Auto-equip is no longer supported.
+
+In addition, it supports several new features. Some of these require using the new `dark_souls_3.apworld` that's bundled with this client in place of the one that's included with Archipelago by default.
+
+* The goal is now customizable. You can choose any boss or set of bosses to be required. The default is still just defeating Soul of Cinder.
+
+* Death link is now more customizable. You can choose to only send death links when you die *without* picking up your sould. You can also enable "death link amnesty", which allows you to choose how many deaths you have to experience before sending a death link to your team.
+
+* Visiting a shop will now send hints to the Archipelago server for all the items in that shop, so that your teammates can see which items you can buy for them.
 
 ## Acknowledgements
 

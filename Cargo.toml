@@ -9,7 +9,7 @@ name = "archipelago"
 
 [dependencies]
 anyhow = "1.0.100"
-archipelago_rs = { git = "https://github.com/nex3/archipelago_rs", branch = "refactor" }
+archipelago_rs = "1.0.0"
 backtrace = "0.3.76"
 bincode = "2.0.1"
 chrono = "0.4.42"
