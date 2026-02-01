@@ -1,9 +1,15 @@
+## 4.1.0-alpha.4
+
+* Make Karla's quest unmissable when `unmissable_quests` is enabled.
+
 ## 4.1.0-alpha.3
 
 * Fix a bug that would cause the static randomizer to fail when running in
   unmissable mode.
 
 * Port forward changes from 4.0.0-beta.3.
+
+* Make Orbeck's quest unmissable when `unmissable_quests` is enabled.
 
 ## 4.1.0-alpha.2
 
