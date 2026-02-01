@@ -1,3 +1,10 @@
+## 4.1.0-alpha.3
+
+* Fix a bug that would cause the static randomizer to fail when running in
+  unmissable mode.
+
+* Port forward changes from 4.0.0-beta.3.
+
 ## 4.1.0-alpha.2
 
 * Include the correct apworld in the distribution.
