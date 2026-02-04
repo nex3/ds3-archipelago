@@ -53,6 +53,9 @@ pub struct Overlay {
     /// Whether the settings window is currently visible.
     settings_window_visible: bool,
 
+    /// Whether the game was on the main menu in the previous frame.
+    was_main_menu: bool,
+
     /// Whether the overlay window was focused in the previous frame.
     was_window_focused: bool,
 
@@ -87,6 +90,7 @@ impl Overlay {
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
             settings_window_visible: false,
+            was_main_menu: false,
             was_window_focused: false,
             was_compact_mode: true,
             focus_say_input_next_frame: false,
@@ -132,7 +136,12 @@ impl Overlay {
         // Because we use focus to determine when to make the overlay
         // transparent, we want it to be removed more aggressivley, so we do so
         // manually.
-        if ui.is_key_pressed(Key::Escape) {
+        if ui.is_key_pressed(Key::Escape) ||
+            // Also defocus the window any time the player loads into the game.
+            // This ensures that controller players don't have to mess with the
+            // keyboard and mouse just to get the overlay unfocused.
+            (self.was_main_menu && !self.is_main_menu())
+        {
             unsafe { igSetWindowFocus_Str(ptr::null()) };
         }
 
@@ -204,6 +213,7 @@ impl Overlay {
 
             self.was_window_focused =
                 ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.was_main_menu = self.is_main_menu();
             self.was_compact_mode = is_compact_mode;
             self.previous_size = Some(ui.window_size());
         });
@@ -401,13 +411,18 @@ impl Overlay {
             // reconnect.
             false
         } else if let Ok(menu_man) = unsafe { MenuMan::instance() } {
-            // If MapItemMan isn't available, that usually means we're on the
-            // main menu. There's probably a better way to detect that but we
-            // don't know it yet.
-            !menu_man.is_menu_mode() && unsafe { MapItemMan::instance() }.is_ok()
+            !menu_man.is_menu_mode() && !self.is_main_menu()
         } else {
             true
         }
+    }
+
+    /// Returns whether the game is currently on the main menu.
+    fn is_main_menu(&self) -> bool {
+        // If MapItemMan isn't available, that usually means we're on the
+        // main menu. There's probably a better way to detect that but we
+        // don't know it yet.
+        unsafe { MapItemMan::instance() }.is_err()
     }
 }
 
