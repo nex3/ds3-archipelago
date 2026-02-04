@@ -59,6 +59,10 @@ pub struct Overlay {
     /// Whether compact mode was enabled in the previous frame.
     was_compact_mode: bool,
 
+    /// Whether to focus the say input on the next frame. Used to keep focus
+    /// after the user pressed enter.
+    focus_say_input_next_frame: bool,
+
     /// The size of the main overlay window in the previous frame. Used to
     /// resize when entering and exiting compact mode.
     previous_size: Option<[f32; 2]>,
@@ -85,6 +89,7 @@ impl Overlay {
             settings_window_visible: false,
             was_window_focused: false,
             was_compact_mode: true,
+            focus_say_input_next_frame: false,
             previous_size: None,
         }
     }
@@ -183,6 +188,7 @@ impl Overlay {
             _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
         };
 
+        let focus_say_input = mem::take(&mut self.focus_say_input_next_frame);
         builder.build(|| {
             self.render_menu_bar(ui);
             ui.separator();
@@ -191,7 +197,7 @@ impl Overlay {
                 if core.is_disconnected() {
                     self.render_connection_buttons(ui, core);
                 } else {
-                    self.render_say_input(ui, core);
+                    self.render_say_input(ui, core, focus_say_input);
                 }
             }
             self.render_url_modal_popup(ui, core);
@@ -357,13 +363,18 @@ impl Overlay {
     }
 
     /// Renders the text box in which users can write chats to the server.
-    fn render_say_input(&mut self, ui: &Ui, core: &mut Core) {
+    ///
+    /// If `focus` is true, this forces the input to be in focus.
+    fn render_say_input(&mut self, ui: &Ui, core: &mut Core, focus: bool) {
         ui.disabled(core.client().is_none(), || {
             let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
             let style = ui.clone_style();
             let spacing = style.item_spacing[0] * self.font_scale * 0.7;
 
             let input_width = ui.push_item_width(-(arrow_button_width + spacing));
+            if focus {
+                ui.set_keyboard_focus_here();
+            }
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
                 .enter_returns_true(true)
@@ -377,6 +388,7 @@ impl Overlay {
                 // We don't have a great way to surface these errors, and
                 // they're non-fatal, so just ignore them.
                 let _ = client.say(mem::take(&mut self.say_input));
+                self.focus_say_input_next_frame = true;
             }
         });
     }

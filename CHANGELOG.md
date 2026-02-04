@@ -1,3 +1,7 @@
+## 4.0.0-beta.4
+
+* Keep focus on the text input after sending a message through the overlay.
+
 ## 4.0.0-beta.3
 
 * Add `Drops` and `Shops` location groups.
