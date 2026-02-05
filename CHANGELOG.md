@@ -1,5 +1,7 @@
 ## 4.0.0-beta.4
 
+* Track history in the overlay's text input.
+
 * Keep focus on the text input after sending a message through the overlay.
 
 * Unfocus and fade out the overlay when loading into a game.

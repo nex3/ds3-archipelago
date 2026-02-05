@@ -11,6 +11,10 @@ use regex_macro::regex;
 
 use crate::core::Core;
 
+mod text_input_history;
+
+use text_input_history::TextInputHistory;
+
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
 const WHITE: ImColor32 = ImColor32::from_rgb(0xFF, 0xFF, 0xFF);
@@ -33,6 +37,9 @@ pub struct Overlay {
 
     /// The text the user typed in the say input.
     say_input: String,
+
+    /// The history of messages sent to the say input.
+    say_history: TextInputHistory,
 
     /// Whether the log was previously scrolled all the way down.
     log_was_scrolled_down: bool,
@@ -85,6 +92,7 @@ impl Overlay {
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
+            say_history: Default::default(),
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
@@ -389,6 +397,7 @@ impl Overlay {
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
                 .enter_returns_true(true)
+                .callback(InputTextCallback::HISTORY, &mut self.say_history)
                 .build();
             drop(input_width);
 
@@ -399,6 +408,7 @@ impl Overlay {
                 // We don't have a great way to surface these errors, and
                 // they're non-fatal, so just ignore them.
                 let line = mem::take(&mut self.say_input);
+                self.say_history.add(line.clone());
                 self.say(line, core);
                 self.focus_say_input_next_frame = true;
             }
