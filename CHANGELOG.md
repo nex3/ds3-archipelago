@@ -1,5 +1,8 @@
 ## 4.0.0-beta.4
 
+* Rename the `goal` value from "Archdragon Peak Boss" to "Archdragon Peak End
+  Boss" for consistency with other regions that have multiple bosses.
+
 * Track history in the overlay's text input.
 
 * Keep focus on the text input after sending a message through the overlay.
