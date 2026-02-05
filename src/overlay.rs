@@ -1,12 +1,13 @@
-use std::{mem, ptr};
+use std::{mem, ptr, str::FromStr};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
-use darksouls3::sprj::{MapItemMan, MenuMan};
+use darksouls3::sprj::{EventFlag, MapItemMan, MenuMan, SprjEventFlagMan};
 use fromsoftware_shared::FromStatic;
 use hudhook::RenderContext;
 use imgui::*;
 use imgui_sys::igSetWindowFocus_Str;
 use log::*;
+use regex_macro::regex;
 
 use crate::core::Core;
 
@@ -394,13 +395,136 @@ impl Overlay {
             ui.same_line_with_spacing(0.0, spacing);
             send = ui.arrow_button("##say-button", Direction::Right) || send;
 
-            if send && let Some(client) = core.client_mut() {
+            if send {
                 // We don't have a great way to surface these errors, and
                 // they're non-fatal, so just ignore them.
-                let _ = client.say(mem::take(&mut self.say_input));
+                let line = mem::take(&mut self.say_input);
+                self.say(line, core);
                 self.focus_say_input_next_frame = true;
             }
         });
+    }
+
+    /// Handles a command from the player, falling back to sending it to the
+    /// server.
+    fn say(&mut self, message: String, core: &mut Core) {
+        let Some(captures) = regex!("^(![^ ]+)( +)?(.*)?$").captures(message.trim()) else {
+            let _ = core.client_mut().unwrap().say(message);
+            return;
+        };
+
+        let command = captures.get(1).unwrap().as_str();
+
+        let arg = || -> Option<&str> { Some(captures.get(3)?.as_str()) };
+
+        let mut arg_error = |usage: &str| {
+            core.log(vec![
+                RichText::Color {
+                    text: format!("Invalid {}.", command),
+                    color: ap::TextColor::Red,
+                },
+                " Usage:\n".into(),
+                usage.into(),
+            ]);
+        };
+
+        match command {
+            "!getevent" => {
+                let Some(flag) = arg().and_then(|f| u32::from_str(f).ok()) else {
+                    arg_error("!getevent EVENT_FLAG");
+                    return;
+                };
+
+                let Ok(flag) = EventFlag::try_from(flag) else {
+                    core.log(RichText::Color {
+                        text: format!("Invalid event ID: {}", flag),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let Ok(events) = (unsafe { SprjEventFlagMan::instance() }) else {
+                    core.log(RichText::Color {
+                        text: "SprjEventFlagMan not loaded".into(),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let value = events.get_flag(flag);
+                core.log(vec![
+                    "Event ".into(),
+                    RichText::Color {
+                        // TODO: Use `u32::from()` once EventFlag supports it
+                        text: format!("{:?}", unsafe { mem::transmute::<EventFlag, u32>(flag) }),
+                        color: ap::TextColor::Blue,
+                    },
+                    ": ".into(),
+                    RichText::Color {
+                        text: format!("{:?}", value),
+                        color: if value {
+                            ap::TextColor::Green
+                        } else {
+                            ap::TextColor::Red
+                        },
+                    },
+                ]);
+            }
+
+            #[cfg(debug_assertions)]
+            "!setevent" => {
+                let Some((flag, value)) = arg().and_then(|a| {
+                    let args = regex!(" +").split(a).collect::<Vec<_>>();
+                    if args.len() == 2 {
+                        Some((u32::from_str(args[0]).ok()?, bool::from_str(args[1]).ok()?))
+                    } else {
+                        None
+                    }
+                }) else {
+                    arg_error("!setevent EVENT_FLAG BOOL");
+                    return;
+                };
+
+                let Ok(flag) = EventFlag::try_from(flag) else {
+                    core.log(RichText::Color {
+                        text: format!("Invalid event ID: {}", flag),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let Ok(events) = (unsafe { SprjEventFlagMan::instance() }) else {
+                    core.log(RichText::Color {
+                        text: "SprjEventFlagMan not loaded".into(),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                events.set_flag(flag, value);
+                core.log(vec![
+                    "Set event ".into(),
+                    RichText::Color {
+                        // TODO: Use `u32::from()` once EventFlag supports it
+                        text: format!("{:?}", unsafe { mem::transmute::<EventFlag, u32>(flag) }),
+                        color: ap::TextColor::Blue,
+                    },
+                    " to ".into(),
+                    RichText::Color {
+                        text: format!("{:?}", value),
+                        color: if value {
+                            ap::TextColor::Green
+                        } else {
+                            ap::TextColor::Red
+                        },
+                    },
+                ]);
+            }
+
+            _ => {
+                let _ = core.client_mut().unwrap().say(message);
+            }
+        }
     }
 
     /// Returns whether the overlay is currently in "compact mode", where the
