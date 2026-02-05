@@ -683,7 +683,7 @@ impl Core {
 
     /// Writes a message to the log buffer that we display to the user in the
     /// overlay, as well as to the internal logger.
-    fn log(&mut self, message: impl Into<ap::Print>) {
+    pub fn log(&mut self, message: impl Into<ap::Print>) {
         let print = message.into();
         info!("[APC] {print}");
         // Consider making this a circular buffer if it ends up eating too much

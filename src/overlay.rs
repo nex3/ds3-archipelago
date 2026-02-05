@@ -1,14 +1,19 @@
-use std::{mem, ptr};
+use std::{mem, ptr, str::FromStr};
 
 use archipelago_rs::{self as ap, RichText, TextColor};
-use darksouls3::sprj::{MapItemMan, MenuMan};
+use darksouls3::sprj::{EventFlag, MapItemMan, MenuMan, SprjEventFlagMan};
 use fromsoftware_shared::FromStatic;
 use hudhook::RenderContext;
 use imgui::*;
 use imgui_sys::igSetWindowFocus_Str;
 use log::*;
+use regex_macro::regex;
 
 use crate::core::Core;
+
+mod text_input_history;
+
+use text_input_history::TextInputHistory;
 
 const GREEN: ImColor32 = ImColor32::from_rgb(0x8A, 0xE2, 0x43);
 const RED: ImColor32 = ImColor32::from_rgb(0xFF, 0x44, 0x44);
@@ -33,6 +38,9 @@ pub struct Overlay {
     /// The text the user typed in the say input.
     say_input: String,
 
+    /// The history of messages sent to the say input.
+    say_history: TextInputHistory,
+
     /// Whether the log was previously scrolled all the way down.
     log_was_scrolled_down: bool,
 
@@ -53,11 +61,18 @@ pub struct Overlay {
     /// Whether the settings window is currently visible.
     settings_window_visible: bool,
 
+    /// Whether the game was on the main menu in the previous frame.
+    was_main_menu: bool,
+
     /// Whether the overlay window was focused in the previous frame.
     was_window_focused: bool,
 
     /// Whether compact mode was enabled in the previous frame.
     was_compact_mode: bool,
+
+    /// Whether to focus the say input on the next frame. Used to keep focus
+    /// after the user pressed enter.
+    focus_say_input_next_frame: bool,
 
     /// The size of the main overlay window in the previous frame. Used to
     /// resize when entering and exiting compact mode.
@@ -77,14 +92,17 @@ impl Overlay {
             viewport_size: None,
             popup_url: String::new(),
             say_input: String::new(),
+            say_history: Default::default(),
             log_was_scrolled_down: false,
             logs_emitted: 0,
             frames_since_new_logs: 0,
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
             settings_window_visible: false,
+            was_main_menu: false,
             was_window_focused: false,
             was_compact_mode: true,
+            focus_say_input_next_frame: false,
             previous_size: None,
         }
     }
@@ -127,7 +145,12 @@ impl Overlay {
         // Because we use focus to determine when to make the overlay
         // transparent, we want it to be removed more aggressivley, so we do so
         // manually.
-        if ui.is_key_pressed(Key::Escape) {
+        if ui.is_key_pressed(Key::Escape) ||
+            // Also defocus the window any time the player loads into the game.
+            // This ensures that controller players don't have to mess with the
+            // keyboard and mouse just to get the overlay unfocused.
+            (self.was_main_menu && !self.is_main_menu())
+        {
             unsafe { igSetWindowFocus_Str(ptr::null()) };
         }
 
@@ -183,6 +206,7 @@ impl Overlay {
             _ => builder.size([viewport_size[0] * 0.4, 300.], Condition::FirstUseEver),
         };
 
+        let focus_say_input = mem::take(&mut self.focus_say_input_next_frame);
         builder.build(|| {
             self.render_menu_bar(ui);
             ui.separator();
@@ -191,13 +215,14 @@ impl Overlay {
                 if core.is_disconnected() {
                     self.render_connection_buttons(ui, core);
                 } else {
-                    self.render_say_input(ui, core);
+                    self.render_say_input(ui, core, focus_say_input);
                 }
             }
             self.render_url_modal_popup(ui, core);
 
             self.was_window_focused =
                 ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.was_main_menu = self.is_main_menu();
             self.was_compact_mode = is_compact_mode;
             self.previous_size = Some(ui.window_size());
         });
@@ -357,28 +382,159 @@ impl Overlay {
     }
 
     /// Renders the text box in which users can write chats to the server.
-    fn render_say_input(&mut self, ui: &Ui, core: &mut Core) {
+    ///
+    /// If `focus` is true, this forces the input to be in focus.
+    fn render_say_input(&mut self, ui: &Ui, core: &mut Core, focus: bool) {
         ui.disabled(core.client().is_none(), || {
             let arrow_button_width = ui.frame_height(); // Arrow buttons are square buttons.
             let style = ui.clone_style();
             let spacing = style.item_spacing[0] * self.font_scale * 0.7;
 
             let input_width = ui.push_item_width(-(arrow_button_width + spacing));
+            if focus {
+                ui.set_keyboard_focus_here();
+            }
             let mut send = ui
                 .input_text("##say-input", &mut self.say_input)
                 .enter_returns_true(true)
+                .callback(InputTextCallback::HISTORY, &mut self.say_history)
                 .build();
             drop(input_width);
 
             ui.same_line_with_spacing(0.0, spacing);
             send = ui.arrow_button("##say-button", Direction::Right) || send;
 
-            if send && let Some(client) = core.client_mut() {
+            if send {
                 // We don't have a great way to surface these errors, and
                 // they're non-fatal, so just ignore them.
-                let _ = client.say(mem::take(&mut self.say_input));
+                let line = mem::take(&mut self.say_input);
+                self.say_history.add(line.clone());
+                self.say(line, core);
+                self.focus_say_input_next_frame = true;
             }
         });
+    }
+
+    /// Handles a command from the player, falling back to sending it to the
+    /// server.
+    fn say(&mut self, message: String, core: &mut Core) {
+        let Some(captures) = regex!("^(![^ ]+)( +)?(.*)?$").captures(message.trim()) else {
+            let _ = core.client_mut().unwrap().say(message);
+            return;
+        };
+
+        let command = captures.get(1).unwrap().as_str();
+
+        let arg = || -> Option<&str> { Some(captures.get(3)?.as_str()) };
+
+        let mut arg_error = |usage: &str| {
+            core.log(vec![
+                RichText::Color {
+                    text: format!("Invalid {}.", command),
+                    color: ap::TextColor::Red,
+                },
+                " Usage:\n".into(),
+                usage.into(),
+            ]);
+        };
+
+        match command {
+            "!getevent" => {
+                let Some(flag) = arg().and_then(|f| u32::from_str(f).ok()) else {
+                    arg_error("!getevent EVENT_FLAG");
+                    return;
+                };
+
+                let Ok(flag) = EventFlag::try_from(flag) else {
+                    core.log(RichText::Color {
+                        text: format!("Invalid event ID: {}", flag),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let Ok(events) = (unsafe { SprjEventFlagMan::instance() }) else {
+                    core.log(RichText::Color {
+                        text: "SprjEventFlagMan not loaded".into(),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let value = events.get_flag(flag);
+                core.log(vec![
+                    "Event ".into(),
+                    RichText::Color {
+                        // TODO: Use `u32::from()` once EventFlag supports it
+                        text: format!("{:?}", unsafe { mem::transmute::<EventFlag, u32>(flag) }),
+                        color: ap::TextColor::Blue,
+                    },
+                    ": ".into(),
+                    RichText::Color {
+                        text: format!("{:?}", value),
+                        color: if value {
+                            ap::TextColor::Green
+                        } else {
+                            ap::TextColor::Red
+                        },
+                    },
+                ]);
+            }
+
+            #[cfg(debug_assertions)]
+            "!setevent" => {
+                let Some((flag, value)) = arg().and_then(|a| {
+                    let args = regex!(" +").split(a).collect::<Vec<_>>();
+                    if args.len() == 2 {
+                        Some((u32::from_str(args[0]).ok()?, bool::from_str(args[1]).ok()?))
+                    } else {
+                        None
+                    }
+                }) else {
+                    arg_error("!setevent EVENT_FLAG BOOL");
+                    return;
+                };
+
+                let Ok(flag) = EventFlag::try_from(flag) else {
+                    core.log(RichText::Color {
+                        text: format!("Invalid event ID: {}", flag),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                let Ok(events) = (unsafe { SprjEventFlagMan::instance() }) else {
+                    core.log(RichText::Color {
+                        text: "SprjEventFlagMan not loaded".into(),
+                        color: ap::TextColor::Red,
+                    });
+                    return;
+                };
+
+                events.set_flag(flag, value);
+                core.log(vec![
+                    "Set event ".into(),
+                    RichText::Color {
+                        // TODO: Use `u32::from()` once EventFlag supports it
+                        text: format!("{:?}", unsafe { mem::transmute::<EventFlag, u32>(flag) }),
+                        color: ap::TextColor::Blue,
+                    },
+                    " to ".into(),
+                    RichText::Color {
+                        text: format!("{:?}", value),
+                        color: if value {
+                            ap::TextColor::Green
+                        } else {
+                            ap::TextColor::Red
+                        },
+                    },
+                ]);
+            }
+
+            _ => {
+                let _ = core.client_mut().unwrap().say(message);
+            }
+        }
     }
 
     /// Returns whether the overlay is currently in "compact mode", where the
@@ -389,13 +545,18 @@ impl Overlay {
             // reconnect.
             false
         } else if let Ok(menu_man) = unsafe { MenuMan::instance() } {
-            // If MapItemMan isn't available, that usually means we're on the
-            // main menu. There's probably a better way to detect that but we
-            // don't know it yet.
-            !menu_man.is_menu_mode() && unsafe { MapItemMan::instance() }.is_ok()
+            !menu_man.is_menu_mode() && !self.is_main_menu()
         } else {
             true
         }
+    }
+
+    /// Returns whether the game is currently on the main menu.
+    fn is_main_menu(&self) -> bool {
+        // If MapItemMan isn't available, that usually means we're on the
+        // main menu. There's probably a better way to detect that but we
+        // don't know it yet.
+        unsafe { MapItemMan::instance() }.is_err()
     }
 }
 
