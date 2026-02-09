@@ -3,7 +3,7 @@
 This package contains the static randomizer and the DS3 mod for integrating _Dark Souls III_ into the [Archipelago] multiworld randomizer. You can download this from the "Assets" dropdown on [the Releases page]. If you're already reading this on the Releases page, it's just below this documentation. See [the Archipelago DS3 setup guide] for details on how to get this running, and the [game page] for more details on how randomization works with _Dark Souls III_.
 
 [Archipelago]: https://archipelago.gg
-[the Releases page]: https://github.com/nex3/ds3-archipelago/releases/
+[the Releases page]: https://github.com/fswap/ds3-archipelago/releases/
 [the Archipelago DS3 setup guide]: https://nex-3.com/ds3/setup
 [game page]: https://nex-3.com/ds3/info/en
 
@@ -13,7 +13,7 @@ This package contains the static randomizer and the DS3 mod for integrating _Dar
 
 You can also check out [the changelog] for information about the changes in the latest randomizer release.
 
-[the changelog]: https://github.com/nex3/ds3-archipelago/blob/main/CHANGELOG.md
+[the changelog]: https://github.com/fswap/ds3-archipelago/blob/main/CHANGELOG.md
 
 ## Differences from 3.x.x
 

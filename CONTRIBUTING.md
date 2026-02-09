@@ -19,7 +19,7 @@ client DLL to `target/debug/archipelago.dll`.
 To use the client, download [the latest release] from GitHub and extract it.
 Edit the `me3-config.toml` file and look for
 
-[the latest release]: https://github.com/nex3/ds3-archipelago/releases
+[the latest release]: https://github.com/fswap/ds3-archipelago/releases
 
 ```toml
 [[natives]]
