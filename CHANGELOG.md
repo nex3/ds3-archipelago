@@ -1,3 +1,16 @@
+## 4.0.0-beta.5
+
+* Change the descriptions of the Firelink Set to more accurately say "shop after
+  beating KFF boss" instead of "shop after placing all Cinders".
+
+* Consider the Firelink Set locations to be logically behind the KFF boss.
+
+* Don't make the Firelink Set locations available upon receiving Soul of the
+  Lords.
+
+* Mark `FS: Titanite Slab - shop after placing all Cinders` as a shop item
+  and not a hidden item.
+
 ## 4.0.0-beta.4
 
 * Rename the `goal` value from "Archdragon Peak Boss" to "Archdragon Peak End
