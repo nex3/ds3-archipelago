@@ -5,7 +5,7 @@ use imgui::*;
 
 use anyhow::{Error, Result};
 use darksouls3::sprj::MenuMan;
-use darksouls3::util::input::{InputBlocker, InputFlags};
+use darksouls3_extra::input::{InputBlocker, InputFlags};
 use fromsoftware_shared::FromStatic;
 
 use crate::{

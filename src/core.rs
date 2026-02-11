@@ -3,9 +3,7 @@ use std::{collections::HashSet, io, mem};
 
 use anyhow::{Error, Result, bail};
 use archipelago_rs as ap;
-use darksouls3::app_menu::*;
-use darksouls3::cs::*;
-use darksouls3::sprj::*;
+use darksouls3::{app_menu::*, cs::*, param::*, sprj::*};
 use fromsoftware_shared::{FromStatic, InstanceResult, Superclass};
 use log::*;
 
@@ -491,11 +489,12 @@ impl Core {
             let row = regulation_manager
                 .get_equip_param(id)
                 .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", id));
+            let row = row.as_dyn();
 
             info!("  Archipelago location: {}", row.archipelago_location_id());
             save_data.locations.insert(row.archipelago_location_id());
 
-            if let Some(good) = row.as_goods()
+            if let EquipParamStruct::EQUIP_PARAM_GOODS_ST(good) = row.as_enum()
                 && good.icon_id() == 7039
             {
                 info!("  Item is Path of the Dragon, granting gesture");
@@ -518,7 +517,7 @@ impl Core {
                     "  Item has no local item data. Basic price: {}, sell value: {}{}",
                     row.basic_price(),
                     row.sell_value(),
-                    if let Some(good) = row.as_goods() {
+                    if let EquipParamStruct::EQUIP_PARAM_GOODS_ST(good) = row.as_enum() {
                         format!(", icon id: {}", good.icon_id())
                     } else {
                         "".into()
@@ -594,6 +593,7 @@ impl Core {
                 regulation_manager
                     .get_equip_param(i.id)
                     .unwrap_or_else(|| panic!("no row defined for Archipelago ID {:?}", i.id))
+                    .as_dyn()
                     .archipelago_location_id()
             })
             .collect::<Vec<_>>();
