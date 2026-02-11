@@ -3,7 +3,7 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use bincode::{Decode, Encode};
 use darksouls3::sprj::MapItemMan;
-use darksouls3::util::save;
+use darksouls3_extra::save;
 use fromsoftware_shared::FromStatic;
 use log::*;
 
@@ -43,51 +43,50 @@ impl SaveData {
     /// Safety: Follow all ilhook safety guidelines.
     pub unsafe fn hook() {
         unsafe {
-            std::mem::forget(save::on_save(|| {
-                Self::instance().and_then(|data| match bincode::encode_to_vec(&*data, CONFIG) {
-                    Ok(bytes) => Some(bytes),
-                    Err(err) => {
-                        warn!("Failed to encode save data: {}", err);
-                        None
-                    }
-                })
-            }));
+            std::mem::forget(save::on_save_load(
+                || {
+                    Self::instance().and_then(|data| match bincode::encode_to_vec(&*data, CONFIG) {
+                        Ok(bytes) => Some(bytes),
+                        Err(err) => {
+                            warn!("Failed to encode save data: {}", err);
+                            None
+                        }
+                    })
+                },
+                |load_type| {
+                    use save::OnLoadType::*;
+                    let bytes = match load_type {
+                        SavedData(bytes) => bytes,
+                        MainMenu => {
+                            // If the player goes back to the main menu, reset
+                            // the granted items and seed info so that if the
+                            // user starts a new file they get all new items and
+                            // no seed conflict.
+                            let mut save = INSTANCE.write().unwrap();
+                            save.items_granted = 0;
+                            save.seed = None;
+                            return;
+                        }
+                        _ => return,
+                    };
 
-            std::mem::forget(save::on_load(|load_type| {
-                use save::OnLoadType::*;
-                let bytes = match load_type {
-                    SavedData(bytes) => bytes,
-                    MainMenu => {
-                        // If the player goes back to the main menu, reset the
-                        // granted items and seed info so that if the user
-                        // starts a new file they get all new items and no seed
-                        // conflict.
-                        let mut save = INSTANCE.write().unwrap();
-                        save.items_granted = 0;
-                        save.seed = None;
-                        return;
-                    }
-                    _ => return,
-                };
-
-                match bincode::decode_from_slice(bytes, CONFIG) {
-                    Ok((data, size)) => {
-                        if size == bytes.len() {
-                            *INSTANCE.write().unwrap() = data;
-                        } else {
-                            warn!(
-                                "Archipelago save data had {} extra bytes! This probably means \
+                    match bincode::decode_from_slice(&bytes, CONFIG) {
+                        Ok((data, size)) => {
+                            if size == bytes.len() {
+                                *INSTANCE.write().unwrap() = data;
+                            } else {
+                                warn!(
+                                    "Archipelago save data had {} extra bytes! This probably means \
                                  that you tried to load a save file created by a different version \
                                  of the Archipelago mod, or by a different mod entirely.",
-                                bytes.len() - size
-                            );
+                                    bytes.len() - size
+                                );
+                            }
                         }
+                        Err(err) => warn!("Failed to load save data: {}", err),
                     }
-                    Err(err) => {
-                        warn!("Failed to load save data: {}", err);
-                    }
-                }
-            }));
+                },
+            ));
         }
     }
 

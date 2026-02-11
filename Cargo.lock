@@ -434,20 +434,52 @@ dependencies = [
 [[package]]
 name = "darksouls3"
 version = "0.12.0"
-source = "git+https://github.com/fswap/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46d3df52b6a59631a6032d09b76637c8b0ef9b289596c8a174bba1badf450020"
 dependencies = [
  "bitfield",
- "bitflags 2.10.0",
  "cxx-stl",
  "encoding_rs",
- "fromsoftware-shared",
- "ilhook",
+ "fromsoftware-shared 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pelite",
  "regex",
  "serde",
  "serde_derive",
  "thiserror 1.0.69",
  "vtable-rs",
+ "windows",
+]
+
+[[package]]
+name = "darksouls3"
+version = "0.12.0"
+source = "git+https://github.com/vswarte/fromsoftware-rs#65842dd8b5ef794366258feb200471e138847c0b"
+dependencies = [
+ "bitfield",
+ "cxx-stl",
+ "encoding_rs",
+ "fromsoftware-shared 0.12.0 (git+https://github.com/vswarte/fromsoftware-rs)",
+ "pelite",
+ "regex",
+ "serde",
+ "serde_derive",
+ "thiserror 1.0.69",
+ "vtable-rs",
+ "windows",
+]
+
+[[package]]
+name = "darksouls3-extra"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fec68c565cd9e94073f1c3f13754001dc937737f0bb54820e2cebf54c301d8"
+dependencies = [
+ "bitflags 2.10.0",
+ "darksouls3 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fromsoftware-shared 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ilhook",
+ "pelite",
+ "thiserror 1.0.69",
  "windows",
 ]
 
@@ -537,8 +569,9 @@ dependencies = [
  "bincode",
  "chrono",
  "clipboard-win",
- "darksouls3",
- "fromsoftware-shared",
+ "darksouls3 0.12.0 (git+https://github.com/vswarte/fromsoftware-rs)",
+ "darksouls3-extra",
+ "fromsoftware-shared 0.12.0 (git+https://github.com/vswarte/fromsoftware-rs)",
  "hudhook",
  "ilhook",
  "imgui",
@@ -664,10 +697,26 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared"
 version = "0.12.0"
-source = "git+https://github.com/fswap/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c175c296b9d827c839de32a0d9107d6420d1e145175189a7f6957ce4d1506348"
 dependencies = [
  "from-singleton",
- "fromsoftware-shared-macros",
+ "fromsoftware-shared-macros 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glam",
+ "pelite",
+ "thiserror 1.0.69",
+ "undname",
+ "vtable-rs",
+ "windows",
+]
+
+[[package]]
+name = "fromsoftware-shared"
+version = "0.12.0"
+source = "git+https://github.com/vswarte/fromsoftware-rs#65842dd8b5ef794366258feb200471e138847c0b"
+dependencies = [
+ "from-singleton",
+ "fromsoftware-shared-macros 0.12.0 (git+https://github.com/vswarte/fromsoftware-rs)",
  "glam",
  "pelite",
  "thiserror 1.0.69",
@@ -679,7 +728,19 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.12.0"
-source = "git+https://github.com/fswap/fromsoftware-rs?branch=darksouls3#8418ca4d41516020f9699f4e81df2d0b59c9ad58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83a0ee48757ea237db11eeb52b1814493422ec5304eb569a82271df9f8eccf30"
+dependencies = [
+ "inflections",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "fromsoftware-shared-macros"
+version = "0.12.0"
+source = "git+https://github.com/vswarte/fromsoftware-rs#65842dd8b5ef794366258feb200471e138847c0b"
 dependencies = [
  "inflections",
  "proc-macro2",
