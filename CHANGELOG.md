@@ -1,3 +1,8 @@
+## 4.0.0-rc.2
+
+* Include the connection between Kiln of the First Flame and Dreg Heap in logic
+  as long as the Kiln of the First Flame boss isn't the only goal.
+
 ## 4.0.0-rc.1
 
 ### Features
