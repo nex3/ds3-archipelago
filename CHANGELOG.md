@@ -1,3 +1,7 @@
+## 4.1.0-alpha.5
+
+* Make Leonhard's quest unmissable when `unmissable_quests` is enabled.
+
 ## 4.1.0-alpha.4
 
 * Make Karla's, Siegward's, and Patches's quests unmissable when
