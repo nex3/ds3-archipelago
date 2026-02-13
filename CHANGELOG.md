@@ -3,6 +3,9 @@
 * Include the connection between Kiln of the First Flame and Dreg Heap in logic
   as long as the Kiln of the First Flame boss isn't the only goal.
 
+* Fix a bug where the static randomizer could crash if Yhorm was randomly placed
+  in his vanilla location.
+
 ## 4.0.0-rc.1
 
 ### Features
