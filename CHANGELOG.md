@@ -4,6 +4,9 @@
   Ludleth for Deacons` as unmissable when unmissable transposition is active, as
   well as marking them conditional and boss locations.
 
+* Fix a bug where Karla wouldn't teleport away from Irithyll Dungeon in
+  unmissable mode.
+
 ## 4.1.0-alpha.4
 
 * Make Karla's, Siegward's, and Patches's quests unmissable when
