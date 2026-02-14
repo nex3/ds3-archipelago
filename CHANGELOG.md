@@ -1,5 +1,7 @@
 ## 4.1.0-alpha.5
 
+* Make the Hidden Blessing in Dreamchaser's Ashes unmissable.
+
 * Properly mark `FS: Crystal Hail - Ludleth for Sage` and `FS: Deep Soul -
   Ludleth for Deacons` as unmissable when unmissable transposition is active, as
   well as marking them conditional and boss locations.
