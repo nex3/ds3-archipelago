@@ -1,5 +1,7 @@
 ## 4.1.0-alpha.5
 
+* Make Leonhard's quest unmissable when `unmissable_quests` is enabled.
+
 * Properly mark `FS: Crystal Hail - Ludleth for Sage` and `FS: Deep Soul -
   Ludleth for Deacons` as unmissable when unmissable transposition is active, as
   well as marking them conditional and boss locations.
