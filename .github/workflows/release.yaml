@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*.*.*']
 
+env:
+  # The prefix for tags that belong to the current stable release of the DS3
+  # mod.
+  STABLE_TAG_PREFIX_PREFIX: 'refs/tags/v4.0.'
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -64,7 +69,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: fswap/SoulsRandomizers
-        ref: ${{ startsWith(github.ref, 'refs/tags/v4.0.') && 'archipelago' || 'archipelago-4.1' }}
+        ref: ${{ startsWith(github.ref, env.STABLE_TAG_PREFIX) && 'archipelago' || 'archipelago-next' }}
         token: ${{ secrets.GH_TOKEN }}
         path: SoulsRandomizers
     - uses: actions/checkout@v4
@@ -106,7 +111,7 @@ jobs:
       with:
         repository: fswap/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: ds3-4.0
+        ref: main
         fetch-depth: 0
 
     - uses: actions/setup-python@v5
@@ -143,7 +148,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: fswap/SoulsRandomizers
-        ref: ${{ startsWith(github.ref, 'refs/tags/v4.0.') && 'archipelago' || 'archipelago-4.1' }}
+        ref: ${{ startsWith(github.ref, env.STABLE_TAG_PREFIX) && 'archipelago' || 'archipelago-next' }}
         path: SoulsRandomizers
 
     - name: Download ModEngine3
@@ -155,7 +160,7 @@ jobs:
 
     - name: Download Archipelago repo
       run: |
-        curl -L "https://github.com/fswap/Archipelago/archive/refs/heads/ds3-4.0.tar.gz" | tar xz
+        curl -L "https://github.com/fswap/Archipelago/archive/refs/heads/main.tar.gz" | tar xz
         cd Archipelago-*/worlds
         zip -r ../../dark_souls_3.apworld dark_souls_3
 
@@ -231,7 +236,7 @@ jobs:
       with:
         repository: fswap/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: ds3-4.0
+        ref: main
         fetch-depth: 0
   
     - run: git tag ds3-${{ needs.version.outputs.version }}
@@ -245,7 +250,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: fswap/SoulsRandomizers
-        ref: ${{ startsWith(github.ref, 'refs/tags/v4.0.') && 'archipelago' || 'archipelago-4.1' }}
+        ref: ${{ startsWith(github.ref, env.STABLE_TAG_PREFIX) && 'archipelago' || 'archipelago-next' }}
         token: ${{ secrets.GH_TOKEN }}
 
     - run: git tag ${{ github.ref_name }}
