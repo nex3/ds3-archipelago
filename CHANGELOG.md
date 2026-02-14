@@ -8,6 +8,9 @@
 * Fix a bug where the static randomizer could crash if Yhorm was randomly placed
   in his vanilla location.
 
+* Ensure that the required Archielago version in the DS3 options template is
+  accurate.
+
 ## 4.0.0-rc.1
 
 ### Features
