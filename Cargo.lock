@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "ds3-archipelago"
-version = "4.0.0-beta.4"
+version = "4.0.0-rc.1"
 dependencies = [
  "anyhow",
  "archipelago_rs",
