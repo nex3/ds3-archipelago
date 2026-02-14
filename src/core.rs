@@ -1,5 +1,6 @@
+use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
-use std::{collections::HashSet, io, mem};
+use std::{io, iter::ExactSizeIterator, mem};
 
 use anyhow::{Error, Result, bail};
 use archipelago_rs as ap;
@@ -11,6 +12,13 @@ use crate::item::{EquipParamExt, ItemIdExt};
 use crate::slot_data::{DeathLinkOption, I64Key, SlotData};
 use crate::{config::Config, save_data::*};
 
+/// The maximum number of log messages to store.
+///
+/// This is relatively low because imgui is not very efficient about not
+/// rendering the offscreen messages every frame, which can cause real slowdown
+/// over long runs with chatty connections.
+const LOG_BUFFER_LIMIT: usize = 200;
+
 /// The core of the Archipelago mod. This is responsible for running the
 /// non-UI-related game logic and interacting with the Archieplago client.
 pub struct Core {
@@ -21,7 +29,7 @@ pub struct Core {
     config: Config,
 
     /// The log of prints displayed in the overlay.
-    log_buffer: Vec<ap::Print>,
+    log_buffer: VecDeque<ap::Print>,
 
     /// The Archipelago client connection.
     connection: ap::Connection<SlotData>,
@@ -83,7 +91,7 @@ impl Core {
             config,
             connection,
             event_buffer: vec![],
-            log_buffer: vec![],
+            log_buffer: Default::default(),
             last_item_time: Instant::now(),
             load_time: None,
             locations_sent: 0,
@@ -158,8 +166,8 @@ impl Core {
 
     /// Returns the list of all logs that have been emitted in the current
     /// session.
-    pub fn logs(&self) -> &[ap::Print] {
-        self.log_buffer.as_slice()
+    pub fn logs(&self) -> impl ExactSizeIterator<Item = &ap::Print> {
+        self.log_buffer.iter()
     }
 
     /// Runs the core logic of the mod. This may set [error], which should be
@@ -236,7 +244,10 @@ impl Core {
                 Error(err) => self.log(err.to_string()),
                 Print(print) => {
                     info!("[APS] {print}");
-                    self.log_buffer.push(print);
+                    if self.log_buffer.len() >= LOG_BUFFER_LIMIT {
+                        self.log_buffer.pop_back();
+                    }
+                    self.log_buffer.push_front(print);
                 }
                 _ => {}
             }
@@ -688,6 +699,9 @@ impl Core {
         info!("[APC] {print}");
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
-        self.log_buffer.push(print);
+        if self.log_buffer.len() >= LOG_BUFFER_LIMIT {
+            self.log_buffer.pop_back();
+        }
+        self.log_buffer.push_front(print);
     }
 }
