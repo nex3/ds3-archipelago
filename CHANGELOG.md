@@ -3,11 +3,16 @@
 * Include the connection between Kiln of the First Flame and Dreg Heap in logic
   as long as the Kiln of the First Flame boss isn't the only goal.
 
+* Limit the log history to 200 messages long to avoid slowdown in long sessions.
+
 * Fix a bug where the static randomizer could crash if Yhorm was randomly placed
   in his vanilla location.
 
 * Fix another case where the config file's location could be detected
   incorrectly on Linux.
+
+* Ensure that the required Archielago version in the DS3 options template is
+  accurate.
 
 ## 4.0.0-rc.1
 
