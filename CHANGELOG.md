@@ -8,6 +8,9 @@
 * Fix a bug where the static randomizer could crash if Yhorm was randomly placed
   in his vanilla location.
 
+* Fix another case where the config file's location could be detected
+  incorrectly on Linux.
+
 * Ensure that the required Archielago version in the DS3 options template is
   accurate.
 
