@@ -1,5 +1,8 @@
 ## 4.1.0-alpha.5
 
+* Make all remaining missable invasions unmissable, except for Creighton the
+  Wanderer who still depends on Sirris's (currently-missable) quest.
+
 * Properly mark `FS: Crystal Hail - Ludleth for Sage` and `FS: Deep Soul -
   Ludleth for Deacons` as unmissable when unmissable transposition is active, as
   well as marking them conditional and boss locations.
