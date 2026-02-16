@@ -114,7 +114,7 @@ jobs:
       with:
         repository: fswap/Archipelago
         token: ${{ secrets.GH_TOKEN }}
-        ref: main
+        ref: ${{ startsWith(github.ref, env.STABLE_TAG_PREFIX) && 'main' || 'ds3-next' }}
         fetch-depth: 0
 
     - uses: mikefarah/yq@v4.52.4
