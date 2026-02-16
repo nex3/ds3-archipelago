@@ -2,6 +2,9 @@
 
 * Fix a bug where logs were being displayed in reverse order in the overlay.
 
+* Fix a bug where, if you load into a save with the overlay collapsed, it won't
+  be openable afterwards.
+
 * Ensure that the required Archielago version in the DS3 options template is
   accurate.
 

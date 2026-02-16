@@ -27,6 +27,7 @@ const MAGENTA: ImColor32 = ImColor32::from_rgb(0xBF, 0x9B, 0xBC);
 const CYAN: ImColor32 = ImColor32::from_rgb(0x34, 0xE2, 0xE2);
 
 /// The visual overlay that appears on top of the game.
+#[derive(Default)]
 pub struct Overlay {
     /// The last-known size of the viewport. This is only set once hudhook has
     /// been initialized and the viewport has a non-zero size.
@@ -89,21 +90,10 @@ impl Overlay {
     /// Creates a new instance of the overlay and the core mod logic.
     pub fn new() -> Self {
         Self {
-            viewport_size: None,
-            popup_url: String::new(),
-            say_input: String::new(),
-            say_history: Default::default(),
-            log_was_scrolled_down: false,
-            logs_emitted: 0,
-            frames_since_new_logs: 0,
             font_scale: 1.8,
             unfocused_window_opacity: 0.4,
-            settings_window_visible: false,
-            was_main_menu: false,
-            was_window_focused: false,
             was_compact_mode: true,
-            focus_say_input_next_frame: false,
-            previous_size: None,
+            ..Default::default()
         }
     }
 
@@ -207,7 +197,7 @@ impl Overlay {
         };
 
         let focus_say_input = mem::take(&mut self.focus_say_input_next_frame);
-        builder.build(|| {
+        let collapsed = builder.build(|| {
             self.render_menu_bar(ui);
             ui.separator();
             self.render_log_window(ui, core);
@@ -222,10 +212,15 @@ impl Overlay {
 
             self.was_window_focused =
                 ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            self.was_main_menu = self.is_main_menu();
-            self.was_compact_mode = is_compact_mode;
             self.previous_size = Some(ui.window_size());
-        });
+        }).is_none();
+
+        self.was_main_menu = self.is_main_menu();
+        self.was_compact_mode = is_compact_mode;
+
+        if collapsed {
+            self.was_window_focused = false;
+        }
     }
 
     /// Renders the modal popup which queries the player for connection
