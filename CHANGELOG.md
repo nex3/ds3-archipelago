@@ -1,3 +1,8 @@
+## 4.0.0-rc.3
+
+* Ensure that the required Archielago version in the DS3 options template is
+  accurate.
+
 ## 4.0.0-rc.2
 
 * Include the connection between Kiln of the First Flame and Dreg Heap in logic
@@ -10,9 +15,6 @@
 
 * Fix another case where the config file's location could be detected
   incorrectly on Linux.
-
-* Ensure that the required Archielago version in the DS3 options template is
-  accurate.
 
 ## 4.0.0-rc.1
 

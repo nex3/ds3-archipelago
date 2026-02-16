@@ -132,7 +132,7 @@ jobs:
       run: |
         python Launcher.py 'Generate Template Options'
         mv 'Players/Templates/Dark Souls III.yaml' 'Dark Souls III Options Template.yaml'
-        yq '.requires.version = strenv(REQUIRED_AP_VERSION)' 'Dark Souls III Options Template.yaml'
+        yq --inplace '.requires.version = strenv(REQUIRED_AP_VERSION)' 'Dark Souls III Options Template.yaml'
 
     - uses: actions/upload-artifact@v4
       with:
