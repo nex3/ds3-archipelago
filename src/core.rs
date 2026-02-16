@@ -245,9 +245,9 @@ impl Core {
                 Print(print) => {
                     info!("[APS] {print}");
                     if self.log_buffer.len() >= LOG_BUFFER_LIMIT {
-                        self.log_buffer.pop_back();
+                        self.log_buffer.pop_front();
                     }
-                    self.log_buffer.push_front(print);
+                    self.log_buffer.push_back(print);
                 }
                 _ => {}
             }
@@ -700,8 +700,8 @@ impl Core {
         // Consider making this a circular buffer if it ends up eating too much
         // memory over time.
         if self.log_buffer.len() >= LOG_BUFFER_LIMIT {
-            self.log_buffer.pop_back();
+            self.log_buffer.pop_front();
         }
-        self.log_buffer.push_front(print);
+        self.log_buffer.push_back(print);
     }
 }

@@ -1,5 +1,7 @@
 ## 4.0.0-rc.3
 
+* Fix a bug where logs were being displayed in reverse order in the overlay.
+
 * Ensure that the required Archielago version in the DS3 options template is
   accurate.
 
