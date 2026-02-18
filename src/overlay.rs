@@ -197,23 +197,25 @@ impl Overlay {
         };
 
         let focus_say_input = mem::take(&mut self.focus_say_input_next_frame);
-        let collapsed = builder.build(|| {
-            self.render_menu_bar(ui);
-            ui.separator();
-            self.render_log_window(ui, core);
-            if !is_compact_mode {
-                if core.is_disconnected() {
-                    self.render_connection_buttons(ui, core);
-                } else {
-                    self.render_say_input(ui, core, focus_say_input);
+        let collapsed = builder
+            .build(|| {
+                self.render_menu_bar(ui);
+                ui.separator();
+                self.render_log_window(ui, core);
+                if !is_compact_mode {
+                    if core.is_disconnected() {
+                        self.render_connection_buttons(ui, core);
+                    } else {
+                        self.render_say_input(ui, core, focus_say_input);
+                    }
                 }
-            }
-            self.render_url_modal_popup(ui, core);
+                self.render_url_modal_popup(ui, core);
 
-            self.was_window_focused =
-                ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            self.previous_size = Some(ui.window_size());
-        }).is_none();
+                self.was_window_focused =
+                    ui.is_window_focused_with_flags(WindowFocusedFlags::ROOT_AND_CHILD_WINDOWS);
+                self.previous_size = Some(ui.window_size());
+            })
+            .is_none();
 
         self.was_main_menu = self.is_main_menu();
         self.was_compact_mode = is_compact_mode;
