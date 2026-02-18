@@ -1,3 +1,7 @@
+## 4.0.0-rc.4
+
+* Fix the "Painted World of Ariandel End Boss" victory condition.
+
 ## 4.0.0-rc.3
 
 * Fix a bug where logs were being displayed in reverse order in the overlay.
